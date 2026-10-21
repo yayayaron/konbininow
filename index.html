@@ -111,6 +111,7 @@
   let map, Route, AdvancedMarkerElement, LatLngBounds, PlaceCls;
   let youMarker, storeMarker, routeLines = [], otherMarkers = [];
   let fix = null; // the fresh GPS reading from the latest tap (accuracy, timestamp)
+  let lastBounds = null; // area of the current route, re-applied after the result card appears
 
   async function init() {
     const [maps, routes, marker, core, places] = await Promise.all([
@@ -266,13 +267,25 @@
         routeLines = routes[0].createPolylines();
         routeLines.forEach((l) => l.setMap(map));
         const b = new LatLngBounds(); routes[0].path.forEach((pt) => b.extend(pt));
+        b.extend(from); b.extend(to); lastBounds = b;
         map.fitBounds(b, 60);
         const mins = routes[0].durationMillis ? Math.max(1, Math.round(routes[0].durationMillis / 60000)) : null;
         return { dist: routes[0].distanceMeters, mins };
       }
     } catch (e) { console.warn("Route failed, showing straight-line distance", e); }
-    const b = new LatLngBounds(); b.extend(from); b.extend(to); map.fitBounds(b, 80);
+    const b = new LatLngBounds(); b.extend(from); b.extend(to); lastBounds = b; map.fitBounds(b, 80);
     return { dist: null, mins: null };
+  }
+
+  // Walking time to a store (used to pick the shortest walk among the closest open stores)
+  async function walkMillis(from, place) {
+    try {
+      const dest = PlaceCls && place.id ? new PlaceCls({ id: place.id }) : ll(place);
+      const { routes } = await Route.computeRoutes({
+        origin: from, destination: dest, travelMode: "WALKING", fields: ["durationMillis"],
+      });
+      return routes && routes[0] && routes[0].durationMillis ? routes[0].durationMillis : Infinity;
+    } catch { return Infinity; }
   }
 
   async function show(from, chosen, openFlag, others) {
@@ -317,6 +330,8 @@
     });
     $("others").classList.toggle("hidden", others.length === 0);
     $("result").classList.remove("hidden");
+    // The map gets shorter once the result card shows, so fit the route again to keep you and the store in view
+    if (lastBounds) setTimeout(() => map.fitBounds(lastBounds, 50), 80);
     const rough = fix && fix.accuracy > 100;
     setStatus(rough
       ? `Your location is approximate (±${Math.round(fix.accuracy)} m), so the route may start in the wrong place. Go outdoors and tap again. / 現在地の精度が低いため、屋外で再度お試しください。`
@@ -346,7 +361,16 @@
         const states = await Promise.all(found.map(openState));
         const open = found.filter((_, i) => states[i] === true)
           .sort((a, b) => metres(here, ll(a)) - metres(here, ll(b)));
-        if (open.length) { await show(here, open[0], true, open.slice(1)); return; }
+        if (open.length) {
+          // Compare real walking times for the 3 closest open stores and pick the shortest walk
+          const top = open.slice(0, 3);
+          setStatus("Comparing walking routes… / 徒歩ルートを比較中…");
+          const times = await Promise.all(top.map((p) => walkMillis(here, p)));
+          const best = times.indexOf(Math.min(...times));
+          const chosen = top[best];
+          await show(here, chosen, true, open.filter((p) => p !== chosen));
+          return;
+        }
         if (!fallback) fallback = found.find((_, i) => states[i] === undefined) || null;
       }
       if (fallback) { await show(here, fallback, false, []); return; }
