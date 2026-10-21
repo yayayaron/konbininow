@@ -11,5 +11,5 @@ window.KONBINI_CONFIG = {
   // Max searches per phone per day.
   DAILY_LIMIT: 30,
   // Anonymous event counter (Cloudflare Worker). Empty = off.
-  STATS_URL: "",
+  STATS_URL: "https://konbininow-stats.yaron-silberberg.workers.dev/e",
 };
