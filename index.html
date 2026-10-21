@@ -1,90 +1,213 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f7b5f">
+<meta name="theme-color" content="#120f2b">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Konbini Finder</title>
+<meta name="apple-mobile-web-app-title" content="コンビニNOW">
+<title>コンビニNOW | Konbini Now – むすびが一番近いコンビニへ</title>
+<meta name="description" content="飲み会のあと、もう一軒はコンビニへ。ボタンひとつで今開いている一番近いコンビニまで徒歩ルート案内。One tap: nearest open konbini, walking route.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://konbininow.com/">
+<meta property="og:title" content="コンビニNOW 🍙 むすびが一番近いコンビニへ案内">
+<meta property="og:description" content="飲み会のあとの「もう一軒」はコンビニへ。ワンタップで今開いてる一番近いコンビニまで。Find the nearest open konbini in one tap.">
+<meta property="og:image" content="https://konbininow.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f6f7f5; --card: #ffffff; --ink: #1b1f1d; --muted: #5d6662;
-    --accent: #0f7b5f; --accent-ink: #ffffff; --line: #e2e6e3; --warn: #b4560a;
+    --night1: #120f2b; --night2: #2a1446; --ink: #fff7ec; --muted: #c9bfe0;
+    --amber: #ffb703; --pink: #ff4d8d; --teal: #2ee6c5; --card: rgba(255,255,255,.08);
+    --line: rgba(255,255,255,.14); --warn: #ffcf70;
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #121614; --card: #1c2220; --ink: #eef2f0; --muted: #a2aca7;
-            --accent: #2fb48b; --accent-ink: #06261c; --line: #2c3431; --warn: #f0a35c; }
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
-  body { display: flex; flex-direction: column; min-height: 100dvh; }
-  header { padding: 14px 16px 10px; padding-top: max(14px, env(safe-area-inset-top)); }
-  header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
-  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
-  #map { flex: 1 1 auto; min-height: 280px; background: var(--line); }
-  #panel { background: var(--card); border-top: 1px solid var(--line); padding: 14px 16px;
-    padding-bottom: max(16px, env(safe-area-inset-bottom)); }
-  #findBtn { width: 100%; border: 0; border-radius: 14px; padding: 16px; font-size: 18px; font-weight: 700;
-    background: var(--accent); color: var(--accent-ink); cursor: pointer; }
-  #findBtn:disabled { opacity: .6; cursor: progress; }
-  #status { margin: 10px 0 0; font-size: 14px; color: var(--muted); min-height: 1.2em; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; color: var(--ink);
+    font-family: "M PLUS Rounded 1c", -apple-system, "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    background: radial-gradient(120% 70% at 50% 0%, #3a1d5c 0%, var(--night2) 35%, var(--night1) 75%) fixed, var(--night1); }
+  body { display: flex; flex-direction: column; align-items: center; min-height: 100dvh;
+    padding: max(10px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom)); overflow-x: hidden; }
+  .stars { position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: radial-gradient(1.5px 1.5px at 20% 15%, #fff8 50%, transparent 51%),
+      radial-gradient(1px 1px at 70% 10%, #fff7 50%, transparent 51%), radial-gradient(1.5px 1.5px at 85% 30%, #fff6 50%, transparent 51%),
+      radial-gradient(1px 1px at 35% 35%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 55% 22%, #fff6 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 10% 40%, #fff5 50%, transparent 51%); animation: twinkle 4s ease-in-out infinite alternate; }
+  @keyframes twinkle { from { opacity: .5 } to { opacity: 1 } }
+  main { position: relative; z-index: 1; width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 12px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-weight: 800; font-size: 22px; letter-spacing: .5px; }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand .logo { width: 34px; height: 34px; border-radius: 9px; box-shadow: 0 0 14px #ffb70355; }
+  .brand b { color: var(--amber); text-shadow: 0 0 12px #ffb70388; }
+  .runs { font-size: 12px; color: var(--muted); background: var(--card); border: 1px solid var(--line); padding: 4px 10px; border-radius: 99px; }
+
+  .hero { position: relative; display: flex; flex-direction: column; align-items: center; padding-top: 6px; }
+  .bubble { position: relative; background: #fff; color: #2a1446; font-weight: 800; font-size: 16px; line-height: 1.35;
+    padding: 10px 14px; border-radius: 18px; text-align: center; max-width: 320px; min-height: 48px;
+    box-shadow: 0 6px 24px #0006; transition: transform .25s; }
+  .bubble small { display: block; font-weight: 500; font-size: 12.5px; color: #6b5a8a; }
+  .bubble:after { content: ""; position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%);
+    border: 10px solid transparent; border-top-color: #fff; border-bottom: 0; }
+  .bubble.pop { transform: scale(1.06); }
+  .stage { position: relative; width: 210px; height: 200px; margin-top: 8px; }
+  .glow { position: absolute; left: 50%; bottom: 0; width: 190px; height: 34px; transform: translateX(-50%);
+    background: radial-gradient(closest-side, #ffb70355, transparent); filter: blur(2px); }
+  #musubi { width: 210px; height: 200px; display: block; }
+  #mb-sway { transform-origin: 100px 176px; animation: sway 3.2s ease-in-out infinite; }
+  @keyframes sway { 0%,100% { transform: rotate(-4deg) } 50% { transform: rotate(4deg) } }
+  #mb-eyes { transform-origin: 100px 86px; animation: blink 5s infinite; }
+  @keyframes blink { 0%,92%,100% { transform: scaleY(1) } 95% { transform: scaleY(.1) } }
+  #mb-cheeks { animation: blush 2.4s ease-in-out infinite alternate; }
+  @keyframes blush { from { opacity: .55 } to { opacity: .95 } }
+  #mb-arm { transform-origin: 160px 128px; animation: wave 1.6s ease-in-out infinite; }
+  @keyframes wave { 0%,100% { transform: rotate(0) } 50% { transform: rotate(-22deg) } }
+  #mb-tails { transform-origin: 148px 50px; animation: flap 1.2s ease-in-out infinite; }
+  @keyframes flap { 0%,100% { transform: rotate(0) } 50% { transform: rotate(10deg) } }
+  .hic { position: absolute; right: 2px; top: 24px; font-weight: 800; color: var(--amber); opacity: 0; font-size: 15px; }
+  .hic.show { animation: hic 1.6s ease-out; }
+  @keyframes hic { 0% { opacity: 0; transform: translateY(6px) } 20% { opacity: 1 } 100% { opacity: 0; transform: translateY(-18px) } }
+  body.searching #mb-sway { animation: hop .45s ease-in-out infinite; }
+  @keyframes hop { 0%,100% { transform: translateY(0) rotate(-3deg) } 50% { transform: translateY(-12px) rotate(3deg) } }
+  body.found #mb-sway { animation: cheer .6s ease-out 3; }
+  @keyframes cheer { 0%,100% { transform: translateY(0) scale(1) } 40% { transform: translateY(-22px) scale(1.05) } }
+
+  #findBtn { position: relative; width: 100%; border: 0; border-radius: 22px; padding: 18px 16px 16px; cursor: pointer;
+    font-family: inherit; font-weight: 800; font-size: 24px; color: #2a1020; letter-spacing: .5px;
+    background: linear-gradient(135deg, var(--amber), #ff8a3d 55%, var(--pink));
+    box-shadow: 0 0 0 3px #ffffff22, 0 10px 30px #ff4d8d66, 0 0 40px #ffb70355; animation: pulse 2.2s ease-in-out infinite; }
+  #findBtn small { display: block; font-size: 14px; font-weight: 500; opacity: .85; margin-top: 2px; }
+  #findBtn:active { transform: scale(.98); }
+  #findBtn:disabled { animation: none; filter: saturate(.6) brightness(.9); cursor: progress; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px #ffffff22, 0 10px 30px #ff4d8d55, 0 0 30px #ffb70344 }
+                     50% { box-shadow: 0 0 0 6px #ffffff33, 0 12px 38px #ff4d8d88, 0 0 60px #ffb70388 } }
+  #status { margin: 0; min-height: 1.3em; font-size: 13.5px; color: var(--muted); text-align: center; }
   #status.warn { color: var(--warn); }
-  .result { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
-  .result h2 { margin: 0 0 4px; font-size: 17px; }
-  .meta { font-size: 14px; color: var(--muted); }
-  .ja { font-size: 15px; margin: -2px 0 4px; }
-  #findBtn small, .actions small { font-weight: 500; font-size: 12px; opacity: .85; }
-  #others li small { display: block; color: var(--muted); }
-  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
-    background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); margin-right: 6px; }
-  .badge.unknown { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
-  .actions { display: flex; gap: 8px; margin-top: 10px; }
-  .actions a { flex: 1; text-align: center; text-decoration: none; padding: 11px; border-radius: 10px;
-    font-weight: 600; font-size: 15px; border: 1px solid var(--accent); color: var(--accent); }
-  .actions a.primary { background: var(--accent); color: var(--accent-ink); }
-  #others { margin-top: 10px; }
-  #others summary { cursor: pointer; font-size: 14px; color: var(--muted); }
-  #others ul { list-style: none; padding: 0; margin: 8px 0 0; }
-  #others li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; display: flex;
-    justify-content: space-between; gap: 8px; cursor: pointer; }
-  #keyBox { margin-top: 12px; font-size: 14px; }
-  #keyBox input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--line);
-    background: var(--bg); color: var(--ink); margin: 6px 0; }
-  #keyBox button { padding: 9px 14px; border-radius: 8px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+  #mapWrap { height: 0; overflow: hidden; border-radius: 18px; transition: height .5s ease; border: 1px solid transparent; }
+  #mapWrap.open { height: 42vh; min-height: 260px; border-color: var(--line); }
+  #map { width: 100%; height: 42vh; min-height: 260px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px; backdrop-filter: blur(6px); }
+  .result h2 { margin: 0; font-size: 19px; }
+  .ja { font-size: 15px; color: var(--muted); margin-top: 1px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 14.5px; }
+  .badge { font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 99px; background: #2ee6c533; color: var(--teal); }
+  .badge.unknown { background: #ffcf7033; color: var(--warn); }
+  .big { font-size: 20px; font-weight: 800; color: var(--amber); }
+  .meta { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .actions { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 12px; }
+  .actions a, .share button { display: block; text-align: center; text-decoration: none; padding: 13px 8px; border-radius: 14px;
+    font-weight: 800; font-size: 16px; color: var(--ink); border: 1px solid var(--line); background: #ffffff10; font-family: inherit; }
+  .actions a.primary { background: linear-gradient(135deg, var(--teal), #24b3ff); color: #06222a; border: 0; }
+  .actions small, .share small { display: block; font-weight: 500; font-size: 11.5px; opacity: .85; }
+  .picks { margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: #ffb70314; border: 1px dashed #ffb70355; font-size: 14px; }
+  .picks b { color: var(--amber); }
+  .share { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .share button { cursor: pointer; font-size: 15px; }
+  .share .line { background: #06c755; color: #fff; border: 0; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  #otherList { list-style: none; padding: 0; margin: 8px 0 0; }
+  #otherList li { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; cursor: pointer; }
+  #otherList li small { display: block; color: var(--muted); }
+  footer { text-align: center; font-size: 12px; color: var(--muted); margin-top: 4px; }
   .hidden { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { *, *:before, *:after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>Konbini Finder</h1>
-  <p>Nearest convenience store that's open right now · 今開いている一番近いコンビニ</p>
-</header>
+<div class="stars"></div>
+<main>
+  <header>
+    <div class="brand"><img src="icon.svg" alt="" class="logo">コンビニ<b>NOW</b></div>
+    <div class="runs" id="runs">🍙 今夜 0 軒目</div>
+  </header>
 
-<div id="map"></div>
+  <section class="hero">
+    <div class="bubble" id="bubble">もう一軒、行っとく？<small>One more stop?</small></div>
+    <div class="stage">
+      <div class="glow"></div>
+      <!-- Musubi: original onigiri salaryman mascot -->
+      <svg id="musubi" viewBox="0 0 200 190" role="img" aria-label="Musubi, the onigiri mascot">
+        <g id="mb-sway">
+          <!-- konbini bag (left hand) -->
+          <g>
+            <path d="M22 118 q-2 -16 10 -16 q12 0 10 16" fill="none" stroke="#e8e2f5" stroke-width="3"/>
+            <rect x="14" y="116" width="36" height="40" rx="6" fill="#f4f1fb"/>
+            <rect x="14" y="128" width="36" height="5" fill="#2ee6c5"/>
+            <rect x="14" y="135" width="36" height="3" fill="#ff4d8d"/>
+            <circle cx="32" cy="148" r="4" fill="#ffb703"/>
+          </g>
+          <path d="M46 126 q10 -6 16 0" stroke="#fffdf6" stroke-width="9" stroke-linecap="round" fill="none"/>
+          <!-- body (rice) -->
+          <path d="M100 18 C114 18 124 28 134 44 L176 122 C188 146 174 172 146 172 L54 172 C26 172 12 146 24 122 L66 44 C76 28 86 18 100 18 Z"
+                fill="#fffdf6" stroke="#2a1446" stroke-width="3"/>
+          <g fill="#ece6d6"><ellipse cx="84" cy="40" rx="3" ry="1.6"/><ellipse cx="118" cy="52" rx="3" ry="1.6"/><ellipse cx="70" cy="70" rx="3" ry="1.6"/><ellipse cx="136" cy="80" rx="3" ry="1.6"/><ellipse cx="96" cy="66" rx="2.5" ry="1.4"/></g>
+          <!-- necktie headband -->
+          <path d="M60 58 Q100 46 140 58 L137 66 Q100 55 63 66 Z" fill="#e63946" stroke="#2a1446" stroke-width="2"/>
+          <g id="mb-tails">
+            <path d="M138 56 l20 -10 l2 9 l-18 8 Z" fill="#e63946" stroke="#2a1446" stroke-width="2"/>
+            <path d="M138 60 l22 4 l-3 8 l-19 -5 Z" fill="#c92a37" stroke="#2a1446" stroke-width="2"/>
+          </g>
+          <!-- face -->
+          <g id="mb-eyes" stroke="#2a1446" stroke-width="4" stroke-linecap="round" fill="none">
+            <path d="M76 88 q8 -9 16 0"/><path d="M108 88 q8 -9 16 0"/>
+          </g>
+          <g id="mb-cheeks" fill="#ff7aa8"><ellipse cx="72" cy="102" rx="9" ry="6"/><ellipse cx="128" cy="102" rx="9" ry="6"/></g>
+          <path d="M90 100 q10 12 20 0 q-10 4 -20 0 Z" fill="#2a1446"/>
+          <path d="M95 104 q5 4 10 0" fill="#ff7aa8"/>
+          <!-- nori jacket with shirt + loosened tie -->
+          <path d="M38 124 H162 L172 142 C180 160 168 172 146 172 H54 C32 172 20 160 28 142 Z" fill="#1f3a30" stroke="#2a1446" stroke-width="3"/>
+          <path d="M84 124 H116 L100 150 Z" fill="#fffdf6"/>
+          <path d="M100 128 l6 4 l-3 18 l-5 4 l-3 -5 l2 -17 Z" fill="#e63946" stroke="#2a1446" stroke-width="1.5" transform="rotate(14 100 140)"/>
+          <path d="M60 130 L80 150 M140 130 L120 150" stroke="#2c5446" stroke-width="3"/>
+          <!-- waving arm (right) -->
+          <g id="mb-arm"><path d="M158 128 q16 -10 20 -26" stroke="#fffdf6" stroke-width="10" stroke-linecap="round" fill="none"/>
+            <path d="M158 128 q16 -10 20 -26" stroke="#2a1446" stroke-width="2" stroke-linecap="round" fill="none" opacity=".25"/></g>
+          <!-- feet -->
+          <ellipse cx="78" cy="176" rx="14" ry="6" fill="#2a1446"/><ellipse cx="122" cy="176" rx="14" ry="6" fill="#2a1446"/>
+        </g>
+      </svg>
+      <div class="hic" id="hic">ヒック!</div>
+    </div>
+  </section>
 
-<section id="panel">
-  <button id="findBtn" type="button">Find nearest open konbini<br><small>近くのコンビニを探す</small></button>
+  <button id="findBtn" type="button">コンビニへGO!<small>Take me to the nearest konbini</small></button>
   <p id="status" role="status" aria-live="polite"></p>
 
-  <div id="result" class="result hidden">
+  <div id="mapWrap"><div id="map"></div></div>
+
+  <section id="result" class="card result hidden">
     <h2 id="rName"></h2>
     <div class="ja" id="rNameJa"></div>
-    <div class="meta"><span id="rBadge" class="badge">Open now</span><span id="rDist"></span></div>
+    <div class="row"><span id="rBadge" class="badge">Open now · 営業中</span><span class="big" id="rMins"></span><span id="rDist"></span></div>
     <div class="meta" id="rAddr"></div>
     <div class="meta" id="rLoc"></div>
     <div class="actions">
-      <a id="navLink" class="primary" target="_blank" rel="noopener">Walk there<br><small>徒歩ルート</small></a>
-      <a id="infoLink" target="_blank" rel="noopener">Store info<br><small>店舗情報</small></a>
+      <a id="navLink" class="primary" target="_blank" rel="noopener">歩いて行く 🚶<small>Walk there (Google Maps)</small></a>
+      <a id="infoLink" target="_blank" rel="noopener">店舗情報<small>Store info</small></a>
+    </div>
+    <div class="picks" id="picks"></div>
+    <div class="share">
+      <button type="button" id="shareBtn">シェア 📣<small>Share</small></button>
+      <button type="button" id="lineBtn" class="line">LINEで送る<small>Send on LINE</small></button>
     </div>
     <details id="others" class="hidden">
-      <summary>Other open stores nearby · 近くの他の店舗</summary>
+      <summary>近くの他の店舗 · Other open stores nearby</summary>
       <ul id="otherList"></ul>
     </details>
-  </div>
-</section>
+  </section>
+
+  <footer>飲みすぎ注意・お水もね 💧 Musubi says: drink water too.<br>konbininow.com</footer>
+</main>
 
 <script src="config.js?v=4"></script>
 <script>
@@ -94,8 +217,39 @@
   const RADII = [400, 1000, 2500, 5000, 15000, 30000]; // metres, widened until an open store is found
   const $ = (id) => document.getElementById(id);
   const statusEl = $("status"), btn = $("findBtn");
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
   function setStatus(msg, warn = false) { statusEl.textContent = msg; statusEl.classList.toggle("warn", warn); }
+
+  // ---- Musubi's speech bubble ----
+  const LINES = {
+    idle: [["もう一軒、行っとく？", "One more stop?"], ["シメのおにぎり、どう？", "An onigiri to end the night?"],
+           ["ビール？アイス？ぜんぶある！", "Beer? Ice cream? It's all there!"], ["お水も買おうね", "Grab some water too!"],
+           ["終電まで、まだ間に合う？", "Still time before the last train?"]],
+    search: [["においで探し中…", "Sniffing out a konbini…"], ["GPSよし、ほろ酔いよし！", "GPS ok, tipsy ok!"], ["灯りはどこだ〜", "Where are those bright lights…"]],
+    lost: [["うーん、見つからない…", "Hmm, can't find one…"]],
+  };
+  function say(ja, en) {
+    const b = $("bubble"); b.innerHTML = ""; b.append(ja); const s = document.createElement("small"); s.textContent = en; b.append(s);
+    b.classList.add("pop"); setTimeout(() => b.classList.remove("pop"), 250);
+  }
+  let holdUntil = 0; // keep important messages (like "found it") on screen for a while
+  setInterval(() => { if (!document.body.classList.contains("searching") && Date.now() > holdUntil) say(...pick(LINES.idle)); }, 6000);
+  setInterval(() => { const h = $("hic"); h.classList.remove("show"); void h.offsetWidth; h.classList.add("show"); }, 9000);
+  $("musubi").addEventListener("click", () => { say(...pick(LINES.idle)); const h = $("hic"); h.classList.remove("show"); void h.offsetWidth; h.classList.add("show"); });
+
+  // ---- "konbini run #N tonight" counter (this device only; resets after 8 hours) ----
+  function runs(add) {
+    let n = 0;
+    try {
+      const d = JSON.parse(localStorage.getItem("kn_runs") || "{}");
+      n = (d.t && Date.now() - d.t < 8 * 3600e3) ? d.n || 0 : 0;
+      if (add) { n += 1; localStorage.setItem("kn_runs", JSON.stringify({ n, t: Date.now() })); }
+    } catch {}
+    $("runs").textContent = `🍙 今夜 ${n} 軒目`;
+    return n;
+  }
+  runs(false);
 
   // ---- API key (from config.js, restricted to konbininow.com) ----
   const KEY = CFG.GOOGLE_MAPS_API_KEY || "";
@@ -108,10 +262,11 @@
 
   window.gm_authFailure = () => setStatus(SORRY, true);
 
-  let map, Route, AdvancedMarkerElement, LatLngBounds, PlaceCls;
+  let map, MapCls, Route, AdvancedMarkerElement, LatLngBounds, PlaceCls;
   let youMarker, storeMarker, routeLines = [], otherMarkers = [];
   let fix = null; // the fresh GPS reading from the latest tap (accuracy, timestamp)
   let lastBounds = null; // area of the current route, re-applied after the result card appears
+  let lastShare = null;
 
   async function init() {
     const [maps, routes, marker, core, places] = await Promise.all([
@@ -121,15 +276,21 @@
       google.maps.importLibrary("core"),
       google.maps.importLibrary("places"),
     ]);
-    Route = routes.Route; PlaceCls = places.Place; AdvancedMarkerElement = marker.AdvancedMarkerElement;
+    MapCls = maps.Map; Route = routes.Route; PlaceCls = places.Place; AdvancedMarkerElement = marker.AdvancedMarkerElement;
     LatLngBounds = core.LatLngBounds;
-    map = new maps.Map($("map"), {
-      center: { lat: 35.681, lng: 139.767 }, zoom: 14, // Tokyo Station until we know where you are
-      mapId: CFG.MAP_ID || "DEMO_MAP_ID", disableDefaultUI: true, zoomControl: true,
-      gestureHandling: "greedy", clickableIcons: false, maxZoom: 19,
-    });
   }
   const ready = init().catch((e) => { console.error(e); setStatus(SORRY, true); });
+
+  // The map stays hidden until there is something to show, so the first screen is just Musubi and the button
+  function ensureMap(center) {
+    $("mapWrap").classList.add("open");
+    if (!map) {
+      map = new MapCls($("map"), {
+        center, zoom: 16, mapId: CFG.MAP_ID || "DEMO_MAP_ID", disableDefaultUI: true, zoomControl: true,
+        gestureHandling: "greedy", clickableIcons: false, maxZoom: 19, colorScheme: "DARK",
+      });
+    } else { map.setCenter(center); map.setZoom(16); }
+  }
 
   // ---- helpers ----
   // Fresh GPS position. The first reading on a phone is often rough (Wi-Fi / cell based),
@@ -149,14 +310,14 @@
       const onPos = (p) => {
         const r = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, at: p.timestamp };
         if (!best || r.accuracy < best.accuracy) best = r;
-        if (best.accuracy > 25) setStatus(`Improving location accuracy (±${Math.round(best.accuracy)} m)… / 現在地の精度を上げています…`);
+        if (best.accuracy > 25) setStatus(`現在地の精度を上げています… Improving location accuracy (±${Math.round(best.accuracy)} m)`);
         if (best.accuracy <= 25) finish();
       };
       const onErr = (err) => {
         if (err.code === 1) {
           done = true; clearTimeout(timer);
           if (id !== null && navigator.geolocation.clearWatch) navigator.geolocation.clearWatch(id);
-          reject(new Error("Location permission was denied. Allow location for this site in your browser settings and try again. / 位置情報を許可してください。"));
+          reject(new Error("位置情報を許可してください。Location permission was denied. Allow location for this site in your browser settings and try again."));
         }
       };
       const timer = setTimeout(finish, 10000);
@@ -245,11 +406,11 @@
     if (storeMarker) storeMarker.map = null;
   }
 
-  function pin(label, bg) {
+  function pin(label, bg, fg = "#fff") {
     const el = document.createElement("div");
     el.textContent = label;
-    el.style.cssText = `background:${bg};color:#fff;font:700 13px system-ui;padding:6px 9px;border-radius:14px;` +
-      "box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap;" +
+    el.style.cssText = `background:${bg};color:${fg};font:800 13px "M PLUS Rounded 1c",system-ui;padding:6px 10px;border-radius:14px;` +
+      "box-shadow:0 2px 10px rgba(0,0,0,.45);border:2px solid #fff;white-space:nowrap;" +
       "max-width:170px;overflow:hidden;text-overflow:ellipsis";
     return el;
   }
@@ -264,7 +425,7 @@
         fields: ["path", "distanceMeters", "durationMillis"],
       });
       if (routes && routes[0]) {
-        routeLines = routes[0].createPolylines();
+        routeLines = routes[0].createPolylines({ polylineOptions: { strokeColor: "#2ee6c5", strokeWeight: 6, strokeOpacity: .95 } });
         routeLines.forEach((l) => l.setMap(map));
         const b = new LatLngBounds(); routes[0].path.forEach((pt) => b.extend(pt));
         b.extend(from); b.extend(to); lastBounds = b;
@@ -288,17 +449,25 @@
     } catch { return Infinity; }
   }
 
+  // Musubi's picks: two fun suggestions plus water, every time
+  const PICKS = ["🍙 おにぎり Onigiri", "🍢 おでん Oden", "🍗 からあげ Karaage", "🍜 カップ麺 Cup noodles",
+                 "🍦 アイス Ice cream", "🍺 もう1本 One more can", "🥪 たまごサンド Egg sando", "🍮 プリン Pudding"];
+  function picksHtml() {
+    const a = [...PICKS].sort(() => Math.random() - .5).slice(0, 2);
+    return `<b>むすびのおすすめ · Musubi's picks:</b> ${a.join(" ・ ")} ・ 💧 お水 Water (trust me)`;
+  }
+
   async function show(from, chosen, openFlag, others) {
     clearMap();
     const to = ll(chosen);
-    storeMarker = new AdvancedMarkerElement({ map, position: to, title: name(chosen), content: pin("🏪 " + name(chosen), "#0f7b5f") });
+    storeMarker = new AdvancedMarkerElement({ map, position: to, title: name(chosen), content: pin("🏪 " + name(chosen), "#ffb703", "#2a1020") });
     others.forEach((o) => {
-      const m = new AdvancedMarkerElement({ map, position: ll(o), title: name(o), content: pin("🏪", "#5d6662") });
+      const m = new AdvancedMarkerElement({ map, position: ll(o), title: name(o), content: pin("🏪", "#5b4a7a") });
       m.addListener("click", () => show(from, o, true, others.filter((x) => x !== o).concat(chosen)));
       otherMarkers.push(m);
     });
 
-    setStatus("Getting walking route…");
+    setStatus("ルート計算中… Getting walking route…");
     const r = await drawRoute(from, chosen);
     const straight = metres(from, to);
     $("rName").textContent = name(chosen);
@@ -306,16 +475,17 @@
     jaName(chosen).then((ja) => { if ($("rName").textContent === name(chosen)) $("rNameJa").textContent = jaLine(name(chosen), ja); });
     const ageS = fix ? Math.max(0, Math.round((Date.now() - (fix.at || Date.now())) / 1000)) : 0;
     $("rLoc").textContent = fix && fix.accuracy
-      ? `Your location: accurate to ~${Math.round(fix.accuracy)} m, ${ageS < 5 ? "just now" : ageS + " s ago"} · 現在地 ±${Math.round(fix.accuracy)}m`
+      ? `現在地 ±${Math.round(fix.accuracy)}m · Your location: accurate to ~${Math.round(fix.accuracy)} m, ${ageS < 5 ? "just now" : ageS + " s ago"}`
       : "";
     $("rBadge").textContent = openFlag ? "Open now · 営業中" : "Hours not listed · 営業時間不明";
     $("rBadge").classList.toggle("unknown", !openFlag);
-    $("rDist").textContent = r.dist
-      ? `${fmtDist(r.dist)} walk${r.mins ? ` · about ${r.mins} min` : ""}`
-      : `${fmtDist(straight)} away (straight line)`;
+    $("rMins").textContent = r.mins ? `徒歩${r.mins}分` : "";
+    $("rDist").textContent = r.dist ? `${fmtDist(r.dist)} walk · about ${r.mins} min` : `${fmtDist(straight)} away (straight line)`;
     $("rAddr").textContent = chosen.formattedAddress || "";
     $("navLink").href = dirUrl(chosen);
     $("infoLink").href = placeUrl(chosen);
+    $("picks").innerHTML = picksHtml();
+    lastShare = { mins: r.mins };
 
     const list = $("otherList"); list.innerHTML = "";
     others.slice(0, 5).forEach((o) => {
@@ -324,17 +494,22 @@
       li.children[0].children[0].textContent = name(o);
       li._loadJa = () => jaName(o).then((ja) => { li.children[0].children[1].textContent = jaLine(name(o), ja); });
       if ($("others").open) li._loadJa(); // Japanese names for alternatives load only when the list is opened
-      li.children[1].textContent = fmtDist(metres(from, ll(o)));
+      li.children[1].textContent = `直線 ${fmtDist(metres(from, ll(o)))}`;
       li.onclick = () => show(from, o, true, others.filter((x) => x !== o).concat(chosen));
       list.appendChild(li);
     });
     $("others").classList.toggle("hidden", others.length === 0);
     $("result").classList.remove("hidden");
-    // The map gets shorter once the result card shows, so fit the route again to keep you and the store in view
-    if (lastBounds) setTimeout(() => map.fitBounds(lastBounds, 50), 80);
+    if (lastBounds) setTimeout(() => map.fitBounds(lastBounds, 50), 550); // after the map has opened
+    document.body.classList.remove("searching"); document.body.classList.add("found");
+    setTimeout(() => document.body.classList.remove("found"), 2000);
+    if (navigator.vibrate) try { navigator.vibrate([60, 40, 60]); } catch {}
+    say(r.mins ? `${r.mins}分でつくよ！カンパイ🍻` : "見つけた！カンパイ🍻", r.mins ? `Found it! ${r.mins} min walk. Kanpai!` : "Found it! Kanpai!");
+    holdUntil = Date.now() + 30000;
+    setTimeout(() => $("mapWrap").scrollIntoView({ behavior: "smooth", block: "start" }), 300);
     const rough = fix && fix.accuracy > 100;
     setStatus(rough
-      ? `Your location is approximate (±${Math.round(fix.accuracy)} m), so the route may start in the wrong place. Go outdoors and tap again. / 現在地の精度が低いため、屋外で再度お試しください。`
+      ? `現在地の精度が低いため、屋外で再度お試しください。 Your location is approximate (±${Math.round(fix.accuracy)} m), so the route may start in the wrong place. Go outdoors and tap again.`
       : openFlag ? "" : "No store with confirmed hours is open nearby; this is the nearest one without listed hours.", rough || !openFlag);
   }
 
@@ -342,21 +517,42 @@
     if ($("others").open) [...$("otherList").children].forEach((li) => li._loadJa && li._loadJa());
   });
 
+  // ---- sharing (Web Share sheet, or LINE) ----
+  const shareText = () => {
+    const m = lastShare && lastShare.mins;
+    return m ? `むすびが${m}分のコンビニ見つけてくれた🍙 Musubi found me a konbini ${m} min away!`
+             : "むすびが一番近いコンビニを見つけてくれる🍙 Musubi finds the nearest open konbini!";
+  };
+  $("shareBtn").onclick = async () => {
+    const url = "https://konbininow.com/";
+    try {
+      if (navigator.share) await navigator.share({ title: "コンビニNOW", text: shareText(), url });
+      else { await navigator.clipboard.writeText(`${shareText()} ${url}`); setStatus("リンクをコピーしました · Link copied!"); }
+    } catch {}
+  };
+  $("lineBtn").onclick = () => {
+    const url = "https://konbininow.com/";
+    window.open(`https://line.me/R/share?text=${encodeURIComponent(shareText() + " " + url)}`, "_blank", "noopener");
+  };
+
   btn.onclick = async () => {
     btn.disabled = true; $("result").classList.add("hidden");
+    document.body.classList.add("searching");
+    say(...pick(LINES.search));
     try {
       await ready;
-      if (!map) throw new Error("Google Maps didn't load.");
-      setStatus("Getting your current location… / 現在地を取得中…");
+      if (!MapCls) throw new Error("Google Maps didn't load.");
+      setStatus("現在地を取得中… Getting your current location…");
       fix = await getPosition();
       const here = { lat: fix.lat, lng: fix.lng }; // plain lat/lng for Google Maps
-      map.setCenter(here); map.setZoom(16);
+      ensureMap(here);
       if (youMarker) youMarker.map = null;
-      youMarker = new AdvancedMarkerElement({ map, position: here, title: "You", content: pin("You", "#1a73e8") });
+      youMarker = new AdvancedMarkerElement({ map, position: here, title: "You", content: pin("🍙 You", "#ff4d8d") });
 
       let fallback = null;
       for (const radius of RADII) {
-        setStatus(`Searching within ${fmtDist(radius)}…`);
+        setStatus(`${fmtDist(radius)}以内を検索中… Searching within ${fmtDist(radius)}…`);
+        say(...pick(LINES.search));
         const found = await searchAround(here, radius);
         const states = await Promise.all(found.map(openState));
         const open = found.filter((_, i) => states[i] === true)
@@ -364,22 +560,26 @@
         if (open.length) {
           // Compare real walking times for the 3 closest open stores and pick the shortest walk
           const top = open.slice(0, 3);
-          setStatus("Comparing walking routes… / 徒歩ルートを比較中…");
+          setStatus("徒歩ルートを比較中… Comparing walking routes…");
           const times = await Promise.all(top.map((p) => walkMillis(here, p)));
           const best = times.indexOf(Math.min(...times));
           const chosen = top[best];
+          runs(true);
           await show(here, chosen, true, open.filter((p) => p !== chosen));
           return;
         }
         if (!fallback) fallback = found.find((_, i) => states[i] === undefined) || null;
       }
-      if (fallback) { await show(here, fallback, false, []); return; }
-      setStatus("No open convenience store found within 30 km. / 30km以内に営業中のコンビニはありません。", true);
+      if (fallback) { runs(true); await show(here, fallback, false, []); return; }
+      say(...LINES.lost[0]); holdUntil = Date.now() + 30000;
+      setStatus("30km以内に営業中のコンビニはありません。 No open convenience store found within 30 km.", true);
     } catch (e) {
       console.error(e);
+      say("あれれ…", "Oops…"); holdUntil = Date.now() + 30000;
       setStatus(e.message || "Something went wrong. Please try again.", true);
     } finally {
       btn.disabled = false;
+      document.body.classList.remove("searching");
     }
   };
 })();
