@@ -35,6 +35,9 @@
   .result { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
   .result h2 { margin: 0 0 4px; font-size: 17px; }
   .meta { font-size: 14px; color: var(--muted); }
+  .ja { font-size: 15px; margin: -2px 0 4px; }
+  #findBtn small, .actions small { font-weight: 500; font-size: 12px; opacity: .85; }
+  #others li small { display: block; color: var(--muted); }
   .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
     background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); margin-right: 6px; }
   .badge.unknown { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
@@ -57,25 +60,27 @@
 <body>
 <header>
   <h1>Konbini Finder</h1>
-  <p>Nearest convenience store that's open right now, with walking directions.</p>
+  <p>Nearest convenience store that's open right now · 今開いている一番近いコンビニ</p>
 </header>
 
 <div id="map"></div>
 
 <section id="panel">
-  <button id="findBtn" type="button">Find nearest open konbini</button>
+  <button id="findBtn" type="button">Find nearest open konbini<br><small>近くのコンビニを探す</small></button>
   <p id="status" role="status" aria-live="polite"></p>
 
   <div id="result" class="result hidden">
     <h2 id="rName"></h2>
+    <div class="ja" id="rNameJa"></div>
     <div class="meta"><span id="rBadge" class="badge">Open now</span><span id="rDist"></span></div>
     <div class="meta" id="rAddr"></div>
+    <div class="meta" id="rLoc"></div>
     <div class="actions">
-      <a id="navLink" class="primary" target="_blank" rel="noopener">Walk there (Google Maps)</a>
-      <a id="infoLink" target="_blank" rel="noopener">Store info</a>
+      <a id="navLink" class="primary" target="_blank" rel="noopener">Walk there<br><small>徒歩ルート</small></a>
+      <a id="infoLink" target="_blank" rel="noopener">Store info<br><small>店舗情報</small></a>
     </div>
     <details id="others" class="hidden">
-      <summary>Other open stores nearby</summary>
+      <summary>Other open stores nearby · 近くの他の店舗</summary>
       <ul id="otherList"></ul>
     </details>
   </div>
@@ -129,6 +134,7 @@
 
   let map, Place, Route, AdvancedMarkerElement, LatLngBounds, rank;
   let youMarker, storeMarker, routeLines = [], otherMarkers = [];
+  let fix = null; // the fresh GPS reading from the latest tap (accuracy, timestamp)
 
   async function init() {
     const [maps, places, routes, marker, core] = await Promise.all([
@@ -154,11 +160,13 @@
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) return reject(new Error("This browser can't share location."));
       navigator.geolocation.getCurrentPosition(
-        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude,
+                         accuracy: p.coords.accuracy, at: p.timestamp }),
         (err) => reject(new Error(err.code === 1
-          ? "Location permission was denied. Allow location for this site in your browser settings and try again."
-          : "Couldn't get your location. Try again outdoors or with Wi-Fi on.")),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+          ? "Location permission was denied. Allow location for this site in your browser settings and try again. / 位置情報を許可してください。"
+          : "Couldn't get your location. Try again outdoors or with Wi-Fi on. / 現在地を取得できませんでした。")),
+        // maximumAge 0 = never reuse an old or cached position; always ask the device for a fresh fix
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
     });
   }
   function metres(a, b) {
@@ -170,6 +178,30 @@
   const fmtDist = (m) => m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
   const ll = (p) => ({ lat: p.location.lat(), lng: p.location.lng() });
   const name = (p) => p.displayName || "Convenience store";
+
+  // Japanese name for a store (Place Details in ja), cached per store
+  const jaCache = new Map();
+  async function jaName(p) {
+    if (jaCache.has(p.id)) return jaCache.get(p.id);
+    let n = "";
+    try {
+      const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(p.id)}?languageCode=ja&regionCode=JP`, {
+        headers: { "X-Goog-Api-Key": KEY, "X-Goog-FieldMask": "displayName" },
+      });
+      const d = await res.json();
+      n = (d.displayName && d.displayName.text) || "";
+    } catch {}
+    jaCache.set(p.id, n);
+    return n;
+  }
+  const jaLine = (en, ja) => (ja && ja !== en ? ja : "");
+
+  // Google Maps links that point at the store itself (name + Place ID), not raw coordinates.
+  // No origin is given, so Google Maps starts from the phone's live location.
+  const dirUrl = (p) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(name(p))}` +
+    `&destination_place_id=${encodeURIComponent(p.id)}&travelmode=walking`;
+  const placeUrl = (p) => p.googleMapsURI ||
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name(p))}&query_place_id=${encodeURIComponent(p.id)}`;
 
   // true = open now, false = closed, undefined = hours not listed (handles 24-hour stores correctly)
   async function openState(place) {
@@ -258,21 +290,27 @@
     const r = await drawRoute(from, chosen);
     const straight = metres(from, to);
     $("rName").textContent = name(chosen);
-    $("rBadge").textContent = openFlag ? "Open now" : "Hours not listed";
+    $("rNameJa").textContent = "";
+    jaName(chosen).then((ja) => { if ($("rName").textContent === name(chosen)) $("rNameJa").textContent = jaLine(name(chosen), ja); });
+    const ageS = fix ? Math.max(0, Math.round((Date.now() - (fix.at || Date.now())) / 1000)) : 0;
+    $("rLoc").textContent = fix && fix.accuracy
+      ? `Your location: accurate to ~${Math.round(fix.accuracy)} m, ${ageS < 5 ? "just now" : ageS + " s ago"} · 現在地 ±${Math.round(fix.accuracy)}m`
+      : "";
+    $("rBadge").textContent = openFlag ? "Open now · 営業中" : "Hours not listed · 営業時間不明";
     $("rBadge").classList.toggle("unknown", !openFlag);
     $("rDist").textContent = r.dist
       ? `${fmtDist(r.dist)} walk${r.mins ? ` · about ${r.mins} min` : ""}`
       : `${fmtDist(straight)} away (straight line)`;
     $("rAddr").textContent = chosen.formattedAddress || "";
-    $("navLink").href = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}` +
-      `&destination=${to.lat},${to.lng}&destination_place_id=${encodeURIComponent(chosen.id)}&travelmode=walking`;
-    $("infoLink").href = chosen.googleMapsURI || `https://www.google.com/maps/search/?api=1&query=${to.lat},${to.lng}&query_place_id=${encodeURIComponent(chosen.id)}`;
+    $("navLink").href = dirUrl(chosen);
+    $("infoLink").href = placeUrl(chosen);
 
     const list = $("otherList"); list.innerHTML = "";
     others.slice(0, 5).forEach((o) => {
       const li = document.createElement("li");
-      li.innerHTML = `<span></span><span class="meta"></span>`;
-      li.children[0].textContent = name(o);
+      li.innerHTML = `<span><span></span><small></small></span><span class="meta"></span>`;
+      li.children[0].children[0].textContent = name(o);
+      jaName(o).then((ja) => { li.children[0].children[1].textContent = jaLine(name(o), ja); });
       li.children[1].textContent = fmtDist(metres(from, ll(o)));
       li.onclick = () => show(from, o, true, others.filter((x) => x !== o).concat(chosen));
       list.appendChild(li);
@@ -287,8 +325,9 @@
     try {
       await ready;
       if (!map) throw new Error("Google Maps didn't load.");
-      setStatus("Finding your location…");
-      const here = await getPosition();
+      setStatus("Getting your current location… / 現在地を取得中…");
+      fix = await getPosition();
+      const here = { lat: fix.lat, lng: fix.lng }; // plain lat/lng for Google Maps
       map.setCenter(here); map.setZoom(16);
       if (youMarker) youMarker.map = null;
       youMarker = new AdvancedMarkerElement({ map, position: here, title: "You", content: pin("You", "#1a73e8") });
