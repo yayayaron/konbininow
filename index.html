@@ -309,7 +309,8 @@
       const li = document.createElement("li");
       li.innerHTML = `<span><span></span><small></small></span><span class="meta"></span>`;
       li.children[0].children[0].textContent = name(o);
-      jaName(o).then((ja) => { li.children[0].children[1].textContent = jaLine(name(o), ja); });
+      li._loadJa = () => jaName(o).then((ja) => { li.children[0].children[1].textContent = jaLine(name(o), ja); });
+      if ($("others").open) li._loadJa(); // Japanese names for alternatives load only when the list is opened
       li.children[1].textContent = fmtDist(metres(from, ll(o)));
       li.onclick = () => show(from, o, true, others.filter((x) => x !== o).concat(chosen));
       list.appendChild(li);
@@ -318,6 +319,10 @@
     $("result").classList.remove("hidden");
     setStatus(openFlag ? "" : "No store with confirmed hours is open nearby; this is the nearest one without listed hours.", !openFlag);
   }
+
+  $("others").addEventListener("toggle", () => {
+    if ($("others").open) [...$("otherList").children].forEach((li) => li._loadJa && li._loadJa());
+  });
 
   btn.onclick = async () => {
     btn.disabled = true; $("result").classList.add("hidden");
