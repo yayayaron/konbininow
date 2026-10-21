@@ -228,8 +228,8 @@
     </div>
     <div class="picks" id="picks"></div>
     <div class="share">
-      <button type="button" id="lineBtn" class="line">LINEで集合 📍<small>Meet here (LINE)</small></button>
-      <button type="button" id="shareBtn">集合リンクを送る<small>Share meet-up link</small></button>
+      <button type="button" id="lineBtn" class="line">LINEで送る<small>Send on LINE</small></button>
+      <button type="button" id="shareBtn">リンクをシェア<small>Share link</small></button>
     </div>
     <details id="others" class="hidden">
       <summary>近くの他の店舗 · Other open stores nearby</summary>
@@ -624,13 +624,13 @@
     if ($("others").open) [...$("otherList").children].forEach((li) => li._loadJa && li._loadJa());
   });
 
-  // ---- Meet-up link: share "meet here" with the group; the link opens the app on that store ----
+  // ---- Store link: share this konbini with friends; the link opens the app on that store ----
   const SITE = "https://konbininow.com/";
   const meetUrl = (p) => `${SITE}?meet=${encodeURIComponent(p.id)}&n=${encodeURIComponent(p.ja || name(p))}`;
   const meetText = () => {
     const p = lastShare && lastShare.p, m = lastShare && lastShare.mins;
     if (!p) return "むすびが一番近いコンビニを見つけてくれる🍙 Musubi finds the nearest open konbini!";
-    return `ここに集合！🍙 ${p.ja || name(p)}${m ? `（徒歩${m}分）` : ""} Meet here! #コンビニNOW`;
+    return `このコンビニに行くよ！🍙 ${p.ja || name(p)}${m ? `（徒歩${m}分）` : ""} #コンビニNOW`;
   };
   const shareLink = () => (lastShare && lastShare.p ? meetUrl(lastShare.p) : SITE);
   $("shareBtn").onclick = async () => {
@@ -646,7 +646,7 @@
   };
 
   async function showMeet(id, n) {
-    say("ここに集合だって！", "Your friends are meeting here!"); holdUntil = Date.now() + 60000;
+    say("このコンビニだって！", "A friend sent you this konbini!"); holdUntil = Date.now() + 60000;
     try {
       await ready;
       if (!MapCls) throw new Error("Google Maps didn't load.");
@@ -654,7 +654,7 @@
         headers: { "X-Goog-Api-Key": KEY, "X-Goog-FieldMask": "id,displayName,location,formattedAddress,googleMapsUri" },
       });
       const d = await res.json();
-      if (!res.ok || !d.location) throw new Error("集合場所が見つかりませんでした · Meet-up spot not found.");
+      if (!res.ok || !d.location) throw new Error("コンビニが見つかりませんでした · Store not found.");
       const jaN = (d.displayName && d.displayName.text) || n;
       const p = { id: d.id, ja: jaN, displayName: brandEn(jaN) || jaN,
         location: { lat: () => d.location.latitude, lng: () => d.location.longitude },
@@ -664,7 +664,7 @@
       $("rName").textContent = "📍 " + name(p);
       $("rNameJa").textContent = "";
       jaName(p).then((ja) => { $("rNameJa").textContent = jaLine(name(p), ja); });
-      $("rBadge").textContent = "集合場所 · Meet-up spot"; $("rBadge").classList.remove("unknown");
+      $("rBadge").textContent = "シェアされたコンビニ · Shared konbini"; $("rBadge").classList.remove("unknown");
       $("rMins").textContent = ""; $("rDist").textContent = "";
       $("rAddr").textContent = p.formattedAddress || ""; $("rLoc").textContent = "";
       $("navLink").href = dirUrl(p); $("infoLink").href = placeUrl(p);
@@ -672,7 +672,7 @@
       $("others").classList.add("hidden");
       lastShare = { p, mins: null };
       $("result").classList.remove("hidden");
-      setStatus("友だちがここで待ってるよ · Your friends are waiting here.");
+      setStatus("友だちがシェアしたコンビニです · A friend shared this konbini with you.");
     } catch (e) { console.error(e); setStatus(e.message || SORRY, true); }
   }
   const qs = new URLSearchParams(location.search);
