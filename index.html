@@ -98,7 +98,7 @@
 (() => {
   const CFG = window.KONBINI_CONFIG || {};
   const LANG = CFG.LANGUAGE || "en";
-  const RADII = [400, 1000, 2500, 5000]; // metres, widened until an open store is found
+  const RADII = [400, 1000, 2500, 5000, 15000, 30000]; // metres, widened until an open store is found
   const $ = (id) => document.getElementById(id);
   const statusEl = $("status"), btn = $("findBtn");
 
@@ -342,7 +342,7 @@
         if (!fallback) fallback = found.find((_, i) => states[i] === undefined) || null;
       }
       if (fallback) { await show(here, fallback, false, []); return; }
-      setStatus("No open convenience store found within 5 km.", true);
+      setStatus("No open convenience store found within 30 km. / 30km以内に営業中のコンビニはありません。", true);
     } catch (e) {
       console.error(e);
       setStatus(e.message || "Something went wrong. Please try again.", true);
