@@ -456,6 +456,39 @@
     if (searchCache.length > 12) searchCache.shift();
     return places;
   }
+  // Names Google tags as convenience stores that are not shops a visitor can use
+  const NOT_A_SHOP = /両替|関係者|従業員|ATM|exchange/i;
+  // Main search: Text Search with Google's own "open now" filter, nearest first.
+  // (Nearby Search only returns the 20 nearest places, so near big stations at night it can
+  // see only closed kiosks and miss an open 24-hour store a few minutes away.)
+  async function searchOpenNow(center) {
+    const now = Date.now();
+    const hit = searchCache.find((c) => c.radius === "open" && now - c.at < 180000 && metres(c.center, center) < 60);
+    if (hit) return hit.places;
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": KEY,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.location,places.formattedAddress,places.businessStatus,places.googleMapsUri",
+      },
+      body: JSON.stringify({
+        textQuery: "コンビニ", includedType: "convenience_store", strictTypeFiltering: true, openNow: true,
+        pageSize: 10, rankPreference: "DISTANCE", languageCode: "ja", regionCode: "JP",
+        locationBias: { circle: { center: { latitude: center.lat, longitude: center.lng }, radius: 2000 } },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || "Store search failed.");
+    const places = (data.places || []).map((p) => {
+      const ja = (p.displayName && p.displayName.text) || "";
+      return { id: p.id, ja, displayName: brandEn(ja) || ja,
+        location: { lat: () => p.location.latitude, lng: () => p.location.longitude },
+        formattedAddress: p.formattedAddress, businessStatus: p.businessStatus, googleMapsURI: p.googleMapsUri, openNow: true };
+    }).filter((p) => !NOT_A_SHOP.test(p.ja) && (!p.businessStatus || p.businessStatus === "OPERATIONAL") && metres(center, ll(p)) <= 30000);
+    searchCache.push({ center, radius: "open", at: now, places });
+    return places;
+  }
   async function searchAroundLive(center, radius) {
     const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
       method: "POST",
@@ -799,6 +832,20 @@
       if (youMarker) youMarker.map = null;
       youMarker = new AdvancedMarkerElement({ map, position: here, title: "You", content: pin("🍙 You", "#ff4d8d") });
 
+      // 1) Open stores, nearest first: compare walking times for the 2 closest and pick the shortest walk
+      setStatus("営業中のコンビニを検索中… Searching for open konbini…");
+      const openNow = (await searchOpenNow(here)).sort((a, b) => metres(here, ll(a)) - metres(here, ll(b)));
+      if (openNow.length) {
+        const top = openNow.slice(0, 2);
+        setStatus("徒歩ルートを比較中… Comparing walking routes…");
+        const times = await Promise.all(top.map((p) => walkMillis(here, p)));
+        const chosen = top[times.indexOf(Math.min(...times))];
+        runs(true); track("found");
+        await show(here, chosen, true, openNow.filter((p) => p !== chosen));
+        maybeInstall();
+        return;
+      }
+      // 2) Backup: widen Nearby Search (also finds stores whose hours Google does not list)
       let fallback = null;
       for (const radius of RADII) {
         setStatus(`${fmtDist(radius)}以内を検索中… Searching within ${fmtDist(radius)}…`);
@@ -819,7 +866,7 @@
           maybeInstall();
           return;
         }
-        if (!fallback) fallback = found.find((_, i) => states[i] === undefined) || null;
+        if (!fallback) fallback = found.find((p, i) => states[i] === undefined && !NOT_A_SHOP.test(p.ja)) || null;
       }
       if (fallback) { runs(true); await show(here, fallback, false, []); return; }
       say(...LINES.lost[0]); holdUntil = Date.now() + 30000; track("none");
