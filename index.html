@@ -141,6 +141,9 @@
   .fshare button { padding: 12px 8px; border-radius: 14px; font-weight: 800; font-size: 15px; font-family: inherit; cursor: pointer;
     color: var(--ink); border: 1px solid var(--line); background: #ffffff12; }
   .fshare button small { display: block; font-weight: 500; font-size: 11.5px; opacity: .85; }
+  .fshare .go { grid-column: 1 / -1; background: linear-gradient(90deg, var(--amber), #ff4d8d); border: 0; color: #2a1020; font-size: 18px; padding: 14px 8px; }
+  .fx { position: fixed; top: max(12px, env(safe-area-inset-top)); right: 12px; z-index: 11; width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid var(--line); background: #ffffff1f; color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
   .fshare .line { background: #06c755; border: 0; color: #fff; }
   .fshare .x { background: #000; border: 1px solid #444; color: #fff; }
   .fnote { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
@@ -239,11 +242,13 @@
 
 <!-- Shime fortune (omikuji) overlay -->
 <div id="fortune" class="overlay hidden" role="dialog" aria-modal="true" aria-label="今夜のシメ占い">
+  <button type="button" id="fX2" class="fx" aria-label="閉じる Close">×</button>
   <div class="sheet">
     <div class="shaker" id="fShaker">🎴</div>
     <div class="fbubble" id="fBubble">シャカシャカ…<small>Shaking the omikuji…</small></div>
     <img id="fImg" alt="今夜のシメ占い Shime fortune card" class="hidden">
     <div class="fshare hidden" id="fShare">
+      <button type="button" id="fGo" class="go">🍙 コンビニへGO!<small>Take me to the nearest konbini</small></button>
       <button type="button" id="fShareImg">画像をシェア 📸<small>Share image</small></button>
       <button type="button" id="fX" class="x">Xでポスト<small>Post on X</small></button>
       <button type="button" id="fLine" class="line">LINEで送る<small>Send on LINE</small></button>
@@ -731,9 +736,19 @@
   }
   let fortuneState = null;
   const fortuneText = () => fortuneState ? `今夜のシメ占いは【${fortuneState.f.lv}】${fortuneState.f.pickItem.split(" ").slice(0, 2).join(" ")}！🍙 #コンビニNOW #シメ占い` : "";
+  // Fortune overlay: close with ×, the Close button, a tap outside, Esc, or the phone's back gesture
+  let fortuneOpen = false;
+  function closeFortune(fromBack) {
+    if (!fortuneOpen) return;
+    fortuneOpen = false; $("fortune").classList.add("hidden");
+    if (!fromBack && history.state && history.state.kn === "fortune") history.back();
+  }
+  window.addEventListener("popstate", () => closeFortune(true));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeFortune(); });
   $("fortuneBtn").onclick = async () => {
     track("fortune");
     $("fortune").classList.remove("hidden");
+    if (!fortuneOpen) { fortuneOpen = true; try { history.pushState({ kn: "fortune" }, ""); } catch {} }
     $("fImg").classList.add("hidden"); $("fShare").classList.add("hidden");
     $("fShaker").classList.remove("hidden");
     $("fBubble").innerHTML = "シャカシャカ…<small>Shaking the omikuji…</small>";
@@ -747,8 +762,10 @@
     $("fImg").classList.remove("hidden"); $("fShare").classList.remove("hidden");
     if (navigator.vibrate) try { navigator.vibrate(80); } catch {}
   };
-  $("fClose").onclick = () => $("fortune").classList.add("hidden");
-  $("fortune").addEventListener("click", (e) => { if (e.target.id === "fortune") $("fortune").classList.add("hidden"); });
+  $("fClose").onclick = () => closeFortune();
+  $("fX2").onclick = () => closeFortune();
+  $("fGo").onclick = () => { closeFortune(); setTimeout(() => btn.click(), 50); };
+  $("fortune").addEventListener("click", (e) => { if (e.target.id === "fortune") closeFortune(); });
   $("fShareImg").onclick = async () => {
     track("fortune_img");
     if (!fortuneState) return;
