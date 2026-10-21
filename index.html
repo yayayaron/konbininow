@@ -84,16 +84,9 @@
       <ul id="otherList"></ul>
     </details>
   </div>
-
-  <div id="keyBox" class="hidden">
-    <strong>API key needed.</strong> Paste your Google Maps Platform key (saved on this device only),
-    or put it in <code>config.js</code> before publishing.
-    <input id="keyInput" type="text" placeholder="AIza..." autocomplete="off">
-    <button id="keySave" type="button">Save key</button>
-  </div>
 </section>
 
-<script src="config.js?v=3"></script>
+<script src="config.js?v=4"></script>
 <script>
 (() => {
   const CFG = window.KONBINI_CONFIG || {};
@@ -104,33 +97,16 @@
 
   function setStatus(msg, warn = false) { statusEl.textContent = msg; statusEl.classList.toggle("warn", warn); }
 
-  // ---- API key: config.js first, then a key saved on this device ----
-  function getKey() {
-    if (CFG.GOOGLE_MAPS_API_KEY) return CFG.GOOGLE_MAPS_API_KEY;
-    try { return localStorage.getItem("konbiniKey") || ""; } catch { return ""; }
-  }
-  $("keySave").onclick = () => {
-    const k = $("keyInput").value.trim();
-    if (!k) return;
-    try { localStorage.setItem("konbiniKey", k); } catch {}
-    location.reload();
-  };
-  const KEY = getKey();
-  if (!KEY) {
-    $("keyBox").classList.remove("hidden");
-    btn.disabled = true;
-    setStatus("Add an API key to start.", true);
-    return;
-  }
+  // ---- API key (from config.js, restricted to konbininow.com) ----
+  const KEY = CFG.GOOGLE_MAPS_API_KEY || "";
+  const SORRY = "Service is temporarily unavailable. Please reload the page. / 一時的に利用できません。再読み込みしてください。";
+  if (!KEY) { btn.disabled = true; setStatus(SORRY, true); return; }
 
   // ---- Google Maps JS bootstrap loader (official dynamic import snippet) ----
   (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})
   ({ key: KEY, v: "weekly", language: LANG, region: "JP" });
 
-  window.gm_authFailure = () => {
-    setStatus("Google rejected the API key. Check that it's valid, billing is on, and this site is allowed.", true);
-    $("keyBox").classList.remove("hidden");
-  };
+  window.gm_authFailure = () => setStatus(SORRY, true);
 
   let map, Route, AdvancedMarkerElement, LatLngBounds;
   let youMarker, storeMarker, routeLines = [], otherMarkers = [];
@@ -151,7 +127,7 @@
       gestureHandling: "greedy", clickableIcons: false, maxZoom: 19,
     });
   }
-  const ready = init().catch((e) => { console.error(e); setStatus("Couldn't load Google Maps. Check the API key and enabled APIs.", true); });
+  const ready = init().catch((e) => { console.error(e); setStatus(SORRY, true); });
 
   // ---- helpers ----
   function getPosition() {
