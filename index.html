@@ -90,6 +90,8 @@
                      50% { box-shadow: 0 0 0 6px #ffffff33, 0 12px 38px #ff4d8d88, 0 0 60px #ffb70388 } }
   #status { margin: 0; min-height: 1.3em; font-size: 13.5px; color: var(--muted); text-align: center; }
   #status.warn { color: var(--warn); }
+  #help { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
+  #help b { color: var(--amber); } #help ul { margin: 6px 0 0; padding-left: 18px; } #help small { display: block; color: var(--muted); font-size: 12px; }
 
   #mapWrap { height: 0; overflow: hidden; border-radius: 18px; transition: height .5s ease; border: 1px solid transparent; }
   #mapWrap.open { height: 42vh; min-height: 260px; border-color: var(--line); }
@@ -119,6 +121,25 @@
   #otherList li { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; cursor: pointer; }
   #otherList li small { display: block; color: var(--muted); }
   footer { text-align: center; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .hint { margin: -2px 0 0; text-align: center; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .ghost { align-self: center; border: 1px solid var(--line); background: #ffffff0d; color: var(--ink); font-family: inherit;
+    font-weight: 800; font-size: 15px; padding: 9px 18px; border-radius: 99px; cursor: pointer; }
+  .ghost small { font-weight: 500; font-size: 12px; color: var(--muted); margin-left: 4px; }
+  .overlay { position: fixed; inset: 0; z-index: 10; background: #0b0820e6; backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .sheet { width: 100%; max-width: 420px; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .shaker { font-size: 72px; animation: shake .25s ease-in-out infinite; }
+  @keyframes shake { 0%,100% { transform: rotate(-14deg) } 50% { transform: rotate(14deg) } }
+  .fbubble { background: #fff; color: #2a1446; font-weight: 800; padding: 10px 14px; border-radius: 16px; text-align: center; }
+  .fbubble small { display: block; font-weight: 500; font-size: 12px; color: #6b5a8a; }
+  #fImg { width: 100%; max-width: 360px; border-radius: 18px; box-shadow: 0 10px 40px #0008; }
+  .fshare { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fshare button { padding: 12px 8px; border-radius: 14px; font-weight: 800; font-size: 15px; font-family: inherit; cursor: pointer;
+    color: var(--ink); border: 1px solid var(--line); background: #ffffff12; }
+  .fshare button small { display: block; font-weight: 500; font-size: 11.5px; opacity: .85; }
+  .fshare .line { background: #06c755; border: 0; color: #fff; }
+  .fshare .x { background: #000; border: 1px solid #444; color: #fff; }
+  .fnote { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
   .hidden { display: none !important; }
   @media (prefers-reduced-motion: reduce) { *, *:before, *:after { animation: none !important; transition: none !important; } }
 </style>
@@ -175,8 +196,14 @@
   </section>
 
   <button id="findBtn" type="button">コンビニへGO!<small>Take me to the nearest konbini</small></button>
+  <p class="hint">今開いてる一番近いコンビニへ徒歩で案内・位置情報は保存しません<br>Walks you to the nearest open konbini · location is never saved</p>
+  <button id="fortuneBtn" class="ghost" type="button">🎴 今夜のシメ占い <small>Tonight's shime fortune</small></button>
   <p id="status" role="status" aria-live="polite"></p>
 
+  <div id="help" class="hidden"><b>位置情報をオンにしてね · Please turn on location</b><ul>
+    <li>iPhone：設定 → プライバシーとセキュリティ → 位置情報サービス → Safari Webサイト →「使用中のみ」<small>Settings → Privacy &amp; Security → Location Services → Safari Websites → While Using</small></li>
+    <li>Android：Chromeのアドレスバーの🔒 → 権限 → 位置情報 → 許可<small>Tap 🔒 in Chrome's address bar → Permissions → Location → Allow</small></li>
+    <li>そのあと再読み込み<small>Then reload the page</small></li></ul></div>
   <div id="mapWrap"><div id="map"></div></div>
 
   <section id="result" class="card result hidden">
@@ -191,8 +218,8 @@
     </div>
     <div class="picks" id="picks"></div>
     <div class="share">
-      <button type="button" id="shareBtn">シェア 📣<small>Share</small></button>
-      <button type="button" id="lineBtn" class="line">LINEで送る<small>Send on LINE</small></button>
+      <button type="button" id="lineBtn" class="line">LINEで集合 📍<small>Meet here (LINE)</small></button>
+      <button type="button" id="shareBtn">集合リンクを送る<small>Share meet-up link</small></button>
     </div>
     <details id="others" class="hidden">
       <summary>近くの他の店舗 · Other open stores nearby</summary>
@@ -200,8 +227,24 @@
     </details>
   </section>
 
-  <footer>飲みすぎ注意・お水もね 💧 Musubi says: drink water too.<br>konbininow.com</footer>
+  <footer>飲みすぎ注意・お水もね 💧 Musubi says: drink water too.<br>飲酒は20歳になってから · konbininow.com</footer>
 </main>
+
+<!-- Shime fortune (omikuji) overlay -->
+<div id="fortune" class="overlay hidden" role="dialog" aria-modal="true" aria-label="今夜のシメ占い">
+  <div class="sheet">
+    <div class="shaker" id="fShaker">🎴</div>
+    <div class="fbubble" id="fBubble">シャカシャカ…<small>Shaking the omikuji…</small></div>
+    <img id="fImg" alt="今夜のシメ占い Shime fortune card" class="hidden">
+    <div class="fshare hidden" id="fShare">
+      <button type="button" id="fShareImg">画像をシェア 📸<small>Share image</small></button>
+      <button type="button" id="fX" class="x">Xでポスト<small>Post on X</small></button>
+      <button type="button" id="fLine" class="line">LINEで送る<small>Send on LINE</small></button>
+      <button type="button" id="fClose">閉じる<small>Close</small></button>
+    </div>
+    <p class="fnote">1日1回・毎日運勢が変わるよ · A new fortune every day</p>
+  </div>
+</div>
 
 <script src="config.js?v=4"></script>
 <script>
@@ -304,14 +347,14 @@
       const onPos = (p) => {
         const r = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, at: p.timestamp };
         if (!best || r.accuracy < best.accuracy) best = r;
-        if (best.accuracy > 25) setStatus(`現在地の精度を上げています… Improving location accuracy (±${Math.round(best.accuracy)} m)`);
+        if (best.accuracy > 25) { setStatus(`現在地の精度を上げています… Improving location accuracy (±${Math.round(best.accuracy)} m)`); say("あと少し…", "Almost there…"); }
         if (best.accuracy <= 25) finish();
       };
       const onErr = (err) => {
         if (err.code === 1) {
           done = true; clearTimeout(timer);
           if (id !== null && navigator.geolocation.clearWatch) navigator.geolocation.clearWatch(id);
-          reject(new Error("位置情報を許可してください。Location permission was denied. Allow location for this site in your browser settings and try again."));
+          const e2 = new Error("位置情報を許可してください。Location permission was denied. Allow location for this site in your browser settings and try again."); e2.denied = true; reject(e2);
         }
       };
       const timer = setTimeout(finish, 10000);
@@ -443,12 +486,25 @@
     } catch { return Infinity; }
   }
 
-  // Musubi's picks: two fun suggestions plus water, every time
-  const PICKS = ["🍙 おにぎり Onigiri", "🍢 おでん Oden", "🍗 からあげ Karaage", "🍜 カップ麺 Cup noodles",
-                 "🍦 アイス Ice cream", "🍺 もう1本 One more can", "🥪 たまごサンド Egg sando", "🍮 プリン Pudding"];
+  // ---- Seasonal picks: 2 seasonal items + a shime sweet + (late at night) a hangover-kit item + water ----
+  const MONTH = new Date().getMonth() + 1;
+  const SEASON = (MONTH >= 11 || MONTH <= 2) ? "winter" : MONTH <= 5 ? "spring" : MONTH <= 8 ? "summer" : "autumn";
+  const SEASON_JA = { winter: "冬", spring: "春", summer: "夏", autumn: "秋" }[SEASON];
+  const SEASONAL = {
+    winter: ["🍢 おでん Oden", "🥟 肉まん Nikuman", "🍠 焼き芋 Roasted sweet potato", "☕ ホットドリンク Hot drink", "🍲 鍋焼きうどん Hot udon"],
+    spring: ["🍓 いちごスイーツ Strawberry sweets", "🌸 春限定スイーツ Spring sweets", "🥪 たまごサンド Egg sando", "🍙 新作おにぎり New onigiri"],
+    summer: ["🍦 アイス Ice cream", "🍧 かき氷 Shaved ice", "🍜 冷やし麺 Cold noodles", "🥤 スポドリ Sports drink"],
+    autumn: ["🌰 栗スイーツ Chestnut sweets", "🍠 さつまいもスイーツ Sweet potato sweets", "🍢 おでん Oden", "🥟 肉まん Nikuman"],
+  };
+  const SHIME_SWEETS = ["🍦 アイス Ice cream", "🍮 プリン Pudding", "🍰 コンビニスイーツ Konbini sweets", "🍨 パフェ風カップ Parfait cup"];
+  const KIT = ["🥤 スポドリ Sports drink", "🧃 ウコン系ドリンク Turmeric drink", "🐚 しじみ系 Shijimi soup"];
   function picksHtml() {
-    const a = [...PICKS].sort(() => Math.random() - .5).slice(0, 2);
-    return `<b>むすびのおすすめ · Musubi's picks:</b> ${a.join(" ・ ")} ・ 💧 お水 Water (trust me)`;
+    const items = [...SEASONAL[SEASON]].sort(() => Math.random() - .5).slice(0, 2);
+    items.push(pick(SHIME_SWEETS.filter((s) => !items.includes(s))));
+    const h = new Date().getHours();
+    if (h >= 21 || h < 5) items.push(pick(KIT.filter((s) => !items.includes(s))));
+    items.push("💧 お水 Water");
+    return `<b>むすびのおすすめ（${SEASON_JA}）· Musubi's picks:</b> ${items.join(" ・ ")}`;
   }
 
   async function show(from, chosen, openFlag, others) {
@@ -479,7 +535,7 @@
     $("navLink").href = dirUrl(chosen);
     $("infoLink").href = placeUrl(chosen);
     $("picks").innerHTML = picksHtml();
-    lastShare = { mins: r.mins };
+    lastShare = { p: chosen, mins: r.mins };
 
     const list = $("otherList"); list.innerHTML = "";
     others.slice(0, 5).forEach((o) => {
@@ -511,27 +567,146 @@
     if ($("others").open) [...$("otherList").children].forEach((li) => li._loadJa && li._loadJa());
   });
 
-  // ---- sharing (Web Share sheet, or LINE) ----
-  const shareText = () => {
-    const m = lastShare && lastShare.mins;
-    return m ? `むすびが${m}分のコンビニ見つけてくれた🍙 Musubi found me a konbini ${m} min away!`
-             : "むすびが一番近いコンビニを見つけてくれる🍙 Musubi finds the nearest open konbini!";
+  // ---- Meet-up link: share "meet here" with the group; the link opens the app on that store ----
+  const SITE = "https://konbininow.com/";
+  const meetUrl = (p) => `${SITE}?meet=${encodeURIComponent(p.id)}&n=${encodeURIComponent(name(p))}`;
+  const meetText = () => {
+    const p = lastShare && lastShare.p, m = lastShare && lastShare.mins;
+    if (!p) return "むすびが一番近いコンビニを見つけてくれる🍙 Musubi finds the nearest open konbini!";
+    return `ここに集合！🍙 ${name(p)}${m ? `（徒歩${m}分）` : ""} Meet here! #コンビニNOW`;
   };
+  const shareLink = () => (lastShare && lastShare.p ? meetUrl(lastShare.p) : SITE);
   $("shareBtn").onclick = async () => {
-    const url = "https://konbininow.com/";
     try {
-      if (navigator.share) await navigator.share({ title: "コンビニNOW", text: shareText(), url });
-      else { await navigator.clipboard.writeText(`${shareText()} ${url}`); setStatus("リンクをコピーしました · Link copied!"); }
+      if (navigator.share) await navigator.share({ title: "コンビニNOW", text: meetText(), url: shareLink() });
+      else { await navigator.clipboard.writeText(`${meetText()} ${shareLink()}`); setStatus("リンクをコピーしました · Link copied!"); }
     } catch {}
   };
   $("lineBtn").onclick = () => {
-    const url = "https://konbininow.com/";
-    window.open(`https://line.me/R/share?text=${encodeURIComponent(shareText() + " " + url)}`, "_blank", "noopener");
+    window.open(`https://line.me/R/share?text=${encodeURIComponent(meetText() + "\n" + shareLink())}`, "_blank", "noopener");
   };
+
+  async function showMeet(id, n) {
+    say("ここに集合だって！", "Your friends are meeting here!"); holdUntil = Date.now() + 60000;
+    try {
+      await ready;
+      if (!MapCls) throw new Error("Google Maps didn't load.");
+      const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?languageCode=${LANG}&regionCode=JP`, {
+        headers: { "X-Goog-Api-Key": KEY, "X-Goog-FieldMask": "id,displayName,location,formattedAddress,googleMapsUri" },
+      });
+      const d = await res.json();
+      if (!res.ok || !d.location) throw new Error("集合場所が見つかりませんでした · Meet-up spot not found.");
+      const p = { id: d.id, displayName: (d.displayName && d.displayName.text) || n,
+        location: { lat: () => d.location.latitude, lng: () => d.location.longitude },
+        formattedAddress: d.formattedAddress, googleMapsURI: d.googleMapsUri };
+      ensureMap(ll(p)); clearMap();
+      storeMarker = new AdvancedMarkerElement({ map, position: ll(p), title: name(p), content: pin("📍 " + name(p), "#ffb703", "#2a1020") });
+      $("rName").textContent = "📍 " + name(p);
+      $("rNameJa").textContent = "";
+      jaName(p).then((ja) => { $("rNameJa").textContent = jaLine(name(p), ja); });
+      $("rBadge").textContent = "集合場所 · Meet-up spot"; $("rBadge").classList.remove("unknown");
+      $("rMins").textContent = ""; $("rDist").textContent = "";
+      $("rAddr").textContent = p.formattedAddress || ""; $("rLoc").textContent = "";
+      $("navLink").href = dirUrl(p); $("infoLink").href = placeUrl(p);
+      $("picks").innerHTML = picksHtml();
+      $("others").classList.add("hidden");
+      lastShare = { p, mins: null };
+      $("result").classList.remove("hidden");
+      setStatus("友だちがここで待ってるよ · Your friends are waiting here.");
+    } catch (e) { console.error(e); setStatus(e.message || SORRY, true); }
+  }
+  const qs = new URLSearchParams(location.search);
+  const meetId = qs.get("meet");
+  if (meetId && /^[A-Za-z0-9_-]{10,300}$/.test(meetId)) showMeet(meetId, (qs.get("n") || "").slice(0, 80));
+
+  // ---- Shime fortune (今夜のシメ占い): one result per day per phone, shareable image card ----
+  function seededRandom(seedStr) {
+    let h = 1779033703 ^ seedStr.length;
+    for (let i = 0; i < seedStr.length; i++) { h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+    return () => { h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
+  }
+  const FORTUNES = [
+    { lv: "大吉", en: "Great luck", w: 20, item: (r) => SHIME_SWEETS[Math.floor(r() * SHIME_SWEETS.length)], ja2: "今夜は最高のシメになる！", en2: "Tonight's shime will be legendary!" },
+    { lv: "中吉", en: "Good luck", w: 25, item: (r) => SEASONAL[SEASON][Math.floor(r() * SEASONAL[SEASON].length)], ja2: "季節の味が運を呼ぶ", en2: "Seasonal food brings luck" },
+    { lv: "小吉", en: "Small luck", w: 20, item: () => "🍙 おにぎり Onigiri", ja2: "シンプルが一番", en2: "Keep it simple" },
+    { lv: "吉", en: "Luck", w: 15, item: () => "🍜 カップ麺 Cup noodles", ja2: "ラーメン派の意地を見せろ", en2: "Show your ramen pride" },
+    { lv: "末吉", en: "Future luck", w: 12, item: () => "🥤 スポドリ Sports drink", ja2: "明日の自分にやさしく", en2: "Be kind to tomorrow's you" },
+    { lv: "凶", en: "Bad luck", w: 8, item: () => "💧 お水だけ Just water", ja2: "今夜はお水で締めよう", en2: "Tonight, finish with water" },
+  ];
+  function todaysFortune() {
+    let dev = "x";
+    try { dev = localStorage.getItem("kn_dev") || (Math.random().toString(36).slice(2)); localStorage.setItem("kn_dev", dev); } catch {}
+    const d = new Date(); const day = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const r = seededRandom(day + dev);
+    let x = r() * 100, f = FORTUNES[0];
+    for (const c of FORTUNES) { if (x < c.w) { f = c; break; } x -= c.w; }
+    return { ...f, pickItem: f.item(r) };
+  }
+  async function fortuneCard(f) {
+    const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    try { await Promise.all([document.fonts.load('800 120px "M PLUS Rounded 1c"'), document.fonts.load('500 40px "M PLUS Rounded 1c"')]); } catch {}
+    const F = (w, s) => `${w} ${s}px "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif`;
+    const bg = g.createRadialGradient(W / 2, 200, 50, W / 2, 500, 1100);
+    bg.addColorStop(0, "#3a1d5c"); bg.addColorStop(.55, "#2a1446"); bg.addColorStop(1, "#120f2b");
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    g.fillStyle = "#ffffff99"; [[120, 120], [930, 90], [980, 420], [80, 560], [560, 60]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); });
+    // paper slip
+    g.fillStyle = "#fffaf0"; g.strokeStyle = "#e63946"; g.lineWidth = 10;
+    const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+    rr(120, 560, 840, 640, 36); g.fill(); g.stroke();
+    // Musubi
+    try {
+      const svg = new XMLSerializer().serializeToString($("musubi"));
+      const img = new Image(); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); await img.decode();
+      g.drawImage(img, W / 2 - 230, 110, 460, 437);
+    } catch {}
+    g.textAlign = "center"; g.fillStyle = "#fff7ec"; g.font = F(800, 64); g.fillText("今夜のシメ占い", W / 2, 90);
+    g.fillStyle = "#e63946"; g.font = F(800, 150); g.fillText(f.lv, W / 2, 760);
+    g.fillStyle = "#6b5a8a"; g.font = F(500, 40); g.fillText(f.en, W / 2, 815);
+    const [emoji, ...rest] = f.pickItem.split(" ");
+    const jaItem = rest.filter((w) => /[^\x00-\x7F]/.test(w)).join(" "); const enItem = rest.filter((w) => !/[^\x00-\x7F]/.test(w)).join(" ");
+    g.fillStyle = "#2a1446"; g.font = F(800, 72); g.fillText(`${emoji} ${jaItem}`, W / 2, 935);
+    g.fillStyle = "#6b5a8a"; g.font = F(500, 38); g.fillText(enItem, W / 2, 990);
+    g.fillStyle = "#2a1446"; g.font = F(800, 46); g.fillText(f.ja2, W / 2, 1090);
+    g.fillStyle = "#6b5a8a"; g.font = F(500, 34); g.fillText(f.en2, W / 2, 1140);
+    g.fillStyle = "#ffb703"; g.font = F(800, 50); g.fillText("konbininow.com", W / 2, 1270);
+    g.fillStyle = "#c9bfe0"; g.font = F(500, 32); g.fillText("#コンビニNOW  #シメ占い", W / 2, 1318);
+    return c;
+  }
+  let fortuneState = null;
+  const fortuneText = () => fortuneState ? `今夜のシメ占いは【${fortuneState.f.lv}】${fortuneState.f.pickItem.split(" ").slice(0, 2).join(" ")}！🍙 #コンビニNOW #シメ占い` : "";
+  $("fortuneBtn").onclick = async () => {
+    $("fortune").classList.remove("hidden");
+    $("fImg").classList.add("hidden"); $("fShare").classList.add("hidden");
+    $("fShaker").classList.remove("hidden");
+    $("fBubble").innerHTML = "シャカシャカ…<small>Shaking the omikuji…</small>";
+    const f = todaysFortune();
+    const [canvas] = await Promise.all([fortuneCard(f), new Promise((r) => setTimeout(r, 1400))]);
+    const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
+    fortuneState = { f, blob };
+    $("fImg").src = URL.createObjectURL(blob);
+    $("fShaker").classList.add("hidden");
+    $("fBubble").innerHTML = `【${f.lv}】出たよ！<small>${f.en}!</small>`;
+    $("fImg").classList.remove("hidden"); $("fShare").classList.remove("hidden");
+    if (navigator.vibrate) try { navigator.vibrate(80); } catch {}
+  };
+  $("fClose").onclick = () => $("fortune").classList.add("hidden");
+  $("fortune").addEventListener("click", (e) => { if (e.target.id === "fortune") $("fortune").classList.add("hidden"); });
+  $("fShareImg").onclick = async () => {
+    if (!fortuneState) return;
+    const file = new File([fortuneState.blob], "shime-fortune.png", { type: "image/png" });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: fortuneText(), url: SITE }); return; }
+    } catch { return; }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(fortuneState.blob); a.download = "shime-fortune.png"; a.click();
+  };
+  $("fX").onclick = () => window.open(`https://x.com/intent/post?text=${encodeURIComponent(fortuneText())}&url=${encodeURIComponent(SITE)}`, "_blank", "noopener");
+  $("fLine").onclick = () => window.open(`https://line.me/R/share?text=${encodeURIComponent(fortuneText() + "\n" + SITE)}`, "_blank", "noopener");
 
   btn.onclick = async () => {
     btn.disabled = true; $("result").classList.add("hidden");
-    document.body.classList.add("searching");
+    document.body.classList.add("searching"); $("help").classList.add("hidden");
     say(...pick(LINES.search));
     try {
       await ready;
@@ -570,6 +745,7 @@
     } catch (e) {
       console.error(e);
       say("あれれ…", "Oops…"); holdUntil = Date.now() + 30000;
+      if (e.denied) $("help").classList.remove("hidden");
       setStatus(e.message || "Something went wrong. Please try again.", true);
     } finally {
       btn.disabled = false;
