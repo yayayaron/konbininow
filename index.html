@@ -108,18 +108,19 @@
 
   window.gm_authFailure = () => setStatus(SORRY, true);
 
-  let map, Route, AdvancedMarkerElement, LatLngBounds;
+  let map, Route, AdvancedMarkerElement, LatLngBounds, PlaceCls;
   let youMarker, storeMarker, routeLines = [], otherMarkers = [];
   let fix = null; // the fresh GPS reading from the latest tap (accuracy, timestamp)
 
   async function init() {
-    const [maps, routes, marker, core] = await Promise.all([
+    const [maps, routes, marker, core, places] = await Promise.all([
       google.maps.importLibrary("maps"),
       google.maps.importLibrary("routes"),
       google.maps.importLibrary("marker"),
       google.maps.importLibrary("core"),
+      google.maps.importLibrary("places"),
     ]);
-    Route = routes.Route; AdvancedMarkerElement = marker.AdvancedMarkerElement;
+    Route = routes.Route; PlaceCls = places.Place; AdvancedMarkerElement = marker.AdvancedMarkerElement;
     LatLngBounds = core.LatLngBounds;
     map = new maps.Map($("map"), {
       center: { lat: 35.681, lng: 139.767 }, zoom: 14, // Tokyo Station until we know where you are
@@ -130,17 +131,38 @@
   const ready = init().catch((e) => { console.error(e); setStatus(SORRY, true); });
 
   // ---- helpers ----
+  // Fresh GPS position. The first reading on a phone is often rough (Wi-Fi / cell based),
+  // so we keep listening for up to 10 s and use the most accurate reading,
+  // stopping early once it is accurate to 25 m or better.
   function getPosition() {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) return reject(new Error("This browser can't share location."));
-      navigator.geolocation.getCurrentPosition(
-        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude,
-                         accuracy: p.coords.accuracy, at: p.timestamp }),
-        (err) => reject(new Error(err.code === 1
-          ? "Location permission was denied. Allow location for this site in your browser settings and try again. / 位置情報を許可してください。"
-          : "Couldn't get your location. Try again outdoors or with Wi-Fi on. / 現在地を取得できませんでした。")),
-        // maximumAge 0 = never reuse an old or cached position; always ask the device for a fresh fix
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+      let best = null, done = false, id = null;
+      const finish = () => {
+        if (done) return; done = true;
+        if (id !== null && navigator.geolocation.clearWatch) navigator.geolocation.clearWatch(id);
+        clearTimeout(timer);
+        if (best) resolve(best);
+        else reject(new Error("Couldn't get your location. Try again outdoors or with Wi-Fi on. / 現在地を取得できませんでした。"));
+      };
+      const onPos = (p) => {
+        const r = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, at: p.timestamp };
+        if (!best || r.accuracy < best.accuracy) best = r;
+        if (best.accuracy > 25) setStatus(`Improving location accuracy (±${Math.round(best.accuracy)} m)… / 現在地の精度を上げています…`);
+        if (best.accuracy <= 25) finish();
+      };
+      const onErr = (err) => {
+        if (err.code === 1) {
+          done = true; clearTimeout(timer);
+          if (id !== null && navigator.geolocation.clearWatch) navigator.geolocation.clearWatch(id);
+          reject(new Error("Location permission was denied. Allow location for this site in your browser settings and try again. / 位置情報を許可してください。"));
+        }
+      };
+      const timer = setTimeout(finish, 10000);
+      // maximumAge 0 = never reuse an old or cached position
+      const opts = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
+      if (navigator.geolocation.watchPosition) id = navigator.geolocation.watchPosition(onPos, onErr, opts);
+      else navigator.geolocation.getCurrentPosition((p) => { onPos(p); finish(); }, onErr, opts);
     });
   }
   function metres(a, b) {
@@ -234,8 +256,10 @@
   async function drawRoute(from, place) {
     const to = ll(place);
     try {
+      // Destination as a Google place (by Place ID), so the route ends at the store's real entrance
+      const dest = PlaceCls && place.id ? new PlaceCls({ id: place.id }) : to;
       const { routes } = await Route.computeRoutes({
-        origin: from, destination: to, travelMode: "WALKING",
+        origin: from, destination: dest, travelMode: "WALKING",
         fields: ["path", "distanceMeters", "durationMillis"],
       });
       if (routes && routes[0]) {
@@ -293,7 +317,10 @@
     });
     $("others").classList.toggle("hidden", others.length === 0);
     $("result").classList.remove("hidden");
-    setStatus(openFlag ? "" : "No store with confirmed hours is open nearby; this is the nearest one without listed hours.", !openFlag);
+    const rough = fix && fix.accuracy > 100;
+    setStatus(rough
+      ? `Your location is approximate (±${Math.round(fix.accuracy)} m), so the route may start in the wrong place. Go outdoors and tap again. / 現在地の精度が低いため、屋外で再度お試しください。`
+      : openFlag ? "" : "No store with confirmed hours is open nearby; this is the nearest one without listed hours.", rough || !openFlag);
   }
 
   $("others").addEventListener("toggle", () => {
