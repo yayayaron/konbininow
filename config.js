@@ -6,4 +6,10 @@ window.KONBINI_CONFIG = {
   MAP_ID: "DEMO_MAP_ID",
   // Language for place names and the map ("en" or "ja").
   LANGUAGE: "en",
+  // Cost guard. PAUSED: true stops all searches for everyone (shows a Google Maps link instead).
+  PAUSED: false,
+  // Max searches per phone per day.
+  DAILY_LIMIT: 30,
+  // Anonymous event counter (Cloudflare Worker). Empty = off.
+  STATS_URL: "",
 };

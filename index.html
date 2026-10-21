@@ -90,6 +90,10 @@
                      50% { box-shadow: 0 0 0 6px #ffffff33, 0 12px 38px #ff4d8d88, 0 0 60px #ffb70388 } }
   #status { margin: 0; min-height: 1.3em; font-size: 13.5px; color: var(--muted); text-align: center; }
   #status.warn { color: var(--warn); }
+  #install { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
+  #install .fnote { flex-basis: 100%; text-align: center; margin: 2px 0 0; }
+  .xbtn { border: 0; background: transparent; color: var(--muted); font-size: 18px; padding: 4px 8px; cursor: pointer; }
+  .fallback { align-self: center; color: var(--amber); font-size: 14px; text-align: center; }
   #help { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
   #help b { color: var(--amber); } #help ul { margin: 6px 0 0; padding-left: 18px; } #help small { display: block; color: var(--muted); font-size: 12px; }
 
@@ -198,7 +202,10 @@
   <button id="findBtn" type="button">コンビニへGO!<small>Take me to the nearest konbini</small></button>
   <p class="hint">今開いてる一番近いコンビニへ徒歩で案内・位置情報は保存しません<br>Walks you to the nearest open konbini · location is never saved</p>
   <button id="fortuneBtn" class="ghost" type="button">🎴 今夜のシメ占い <small>Tonight's shime fortune</small></button>
+  <div id="install" class="hidden"><button id="installBtn" class="ghost" type="button">📲 ホーム画面に追加 <small>Add to Home Screen</small></button><button id="installX" class="xbtn" type="button" aria-label="閉じる Close">×</button>
+    <p id="installTip" class="fnote hidden">Safariの共有ボタン ⬆️ →「ホーム画面に追加」<br>Tap Share ⬆️ in Safari → Add to Home Screen</p></div>
   <p id="status" role="status" aria-live="polite"></p>
+  <a id="gmFallback" class="fallback hidden" href="https://www.google.com/maps/search/?api=1&amp;query=%E3%82%B3%E3%83%B3%E3%83%93%E3%83%8B" target="_blank" rel="noopener">Google Mapsでコンビニを探す · Search konbini in Google Maps</a>
 
   <div id="help" class="hidden"><b>位置情報をオンにしてね · Please turn on location</b><ul>
     <li>iPhone：設定 → プライバシーとセキュリティ → 位置情報サービス → Safari Webサイト →「使用中のみ」<small>Settings → Privacy &amp; Security → Location Services → Safari Websites → While Using</small></li>
@@ -246,7 +253,7 @@
   </div>
 </div>
 
-<script src="config.js?v=4"></script>
+<script src="config.js?v=5"></script>
 <script>
 (() => {
   const CFG = window.KONBINI_CONFIG || {};
@@ -257,6 +264,41 @@
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
   function setStatus(msg, warn = false) { statusEl.textContent = msg; statusEl.classList.toggle("warn", warn); }
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+                  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+  // Anonymous event counter: only the event name is sent (no location, no ID, no cookie)
+  const track = (e) => { if (!CFG.STATS_URL) return; try { navigator.sendBeacon(`${CFG.STATS_URL}?e=${encodeURIComponent(e)}`); } catch {} };
+
+  // Cost guard: CFG.PAUSED switches searches off for everyone; DAILY_LIMIT caps searches per phone per day
+  const DAILY_LIMIT = CFG.DAILY_LIMIT || 30;
+  function allowSearch() {
+    const today = new Date().toDateString();
+    let d = {}; try { d = JSON.parse(store.get("kn_quota") || "{}"); } catch {}
+    if (d.day !== today) d = { day: today, n: 0 };
+    if (d.n >= DAILY_LIMIT) return false;
+    d.n++; store.set("kn_quota", JSON.stringify(d)); return true;
+  }
+
+  // Install to home screen: offered from the 2nd visit, never on the first
+  const visits = (+store.get("kn_visits") || 0) + 1; store.set("kn_visits", String(visits));
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  let installEvt = null;
+  function maybeInstall() {
+    if (standalone || visits < 2 || store.get("kn_install_x")) return;
+    if (installEvt || isIOS) $("install").classList.remove("hidden");
+  }
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; maybeInstall(); });
+  window.addEventListener("appinstalled", () => { $("install").classList.add("hidden"); track("installed"); });
+  $("installBtn").onclick = async () => {
+    if (installEvt) { installEvt.prompt(); const c = await installEvt.userChoice; if (c.outcome === "accepted") track("installed"); installEvt = null; $("install").classList.add("hidden"); }
+    else { $("installTip").classList.toggle("hidden"); track("install_tip"); }
+  };
+  $("installX").onclick = () => { store.set("kn_install_x", "1"); $("install").classList.add("hidden"); };
+  if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  setTimeout(maybeInstall, 1500);
+  track(standalone ? "open_app" : "open");
 
   // ---- Musubi's speech bubble ----
   const LINES = {
@@ -372,31 +414,27 @@
   }
   const fmtDist = (m) => m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
   const ll = (p) => ({ lat: p.location.lat(), lng: p.location.lng() });
+  // Stores are searched in Japanese (one call gives the full Japanese name); the English
+  // line is the chain name from this list, so no second "details" call is needed.
+  const BRANDS = [
+    [/^ナチュラルローソン/, "Natural Lawson"], [/^ローソンストア\s*100/, "Lawson Store 100"], [/^ローソン/, "Lawson"],
+    [/^セブン[-‐ー－・]?イレブン/, "7-Eleven"], [/^ファミリーマート/, "FamilyMart"], [/^ミニストップ/, "Ministop"],
+    [/^デイリーヤマザキ/, "Daily Yamazaki"], [/^ヤマザキ/, "Yamazaki Shop"], [/^セイコーマート/, "Seicomart"],
+    [/^(ニューデイズ|NewDays)/i, "NewDays"], [/^ポプラ/, "Poplar"], [/^生活彩家/, "Seikatsu Saika"], [/^スリーエフ/, "Three F"],
+    [/^セーブオン/, "Save On"], [/^コミュニティ・?ストア/, "Community Store"], [/^ココストア/, "Coco Store"],
+    [/^(セブン|7-?eleven)/i, "7-Eleven"], [/^family\s*mart/i, "FamilyMart"], [/^lawson/i, "Lawson"],
+  ];
+  const brandEn = (ja) => { for (const [re, en] of BRANDS) if (re.test(ja || "")) return en; return ""; };
   const name = (p) => p.displayName || "Convenience store";
-
-  // Japanese name for a store (Place Details in ja), cached per store
-  const jaCache = new Map();
-  async function jaName(p) {
-    if (jaCache.has(p.id)) return jaCache.get(p.id);
-    let n = "";
-    try {
-      const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(p.id)}?languageCode=ja&regionCode=JP`, {
-        headers: { "X-Goog-Api-Key": KEY, "X-Goog-FieldMask": "displayName" },
-      });
-      const d = await res.json();
-      n = (d.displayName && d.displayName.text) || "";
-    } catch {}
-    jaCache.set(p.id, n);
-    return n;
-  }
+  async function jaName(p) { return p.ja || ""; }
   const jaLine = (en, ja) => (ja && ja !== en ? ja : "");
 
   // Google Maps links that point at the store itself (name + Place ID), not raw coordinates.
   // No origin is given, so Google Maps starts from the phone's live location.
-  const dirUrl = (p) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(name(p))}` +
+  const dirUrl = (p) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.ja || name(p))}` +
     `&destination_place_id=${encodeURIComponent(p.id)}&travelmode=walking`;
   const placeUrl = (p) => p.googleMapsURI ||
-    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name(p))}&query_place_id=${encodeURIComponent(p.id)}`;
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.ja || name(p))}&query_place_id=${encodeURIComponent(p.id)}`;
 
   // true = open now, false = closed, undefined = hours not listed (handles 24-hour stores correctly)
   async function openState(place) {
@@ -405,7 +443,17 @@
   }
 
   // Places API (New) Nearby Search over REST, so we get Google's own "open now" flag
+  const searchCache = []; // same spot (within 60 m), same radius, last 3 min: reuse instead of paying again
   async function searchAround(center, radius) {
+    const now = Date.now();
+    const hit = searchCache.find((c) => c.radius === radius && now - c.at < 180000 && metres(c.center, center) < 60);
+    if (hit) return hit.places;
+    const places = await searchAroundLive(center, radius);
+    searchCache.push({ center, radius, at: now, places });
+    if (searchCache.length > 12) searchCache.shift();
+    return places;
+  }
+  async function searchAroundLive(center, radius) {
     const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
       method: "POST",
       headers: {
@@ -419,22 +467,26 @@
         excludedPrimaryTypes: ["gas_station"],
         maxResultCount: 20,
         rankPreference: "DISTANCE",
-        languageCode: LANG, regionCode: "JP",
+        languageCode: "ja", regionCode: "JP",
         locationRestriction: { circle: { center: { latitude: center.lat, longitude: center.lng }, radius } },
       }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error((data.error && data.error.message) || "Store search failed.");
-    return (data.places || []).map((p) => ({
+    return (data.places || []).map((p) => {
+      const ja = (p.displayName && p.displayName.text) || "";
+      return {
       id: p.id,
-      displayName: p.displayName && p.displayName.text,
+      ja,
+      displayName: brandEn(ja) || ja,
       location: { lat: () => p.location.latitude, lng: () => p.location.longitude },
       formattedAddress: p.formattedAddress,
       businessStatus: p.businessStatus,
       googleMapsURI: p.googleMapsUri,
       openNow: p.currentOpeningHours ? p.currentOpeningHours.openNow
              : p.regularOpeningHours ? p.regularOpeningHours.openNow : undefined,
-    }));
+      };
+    });
   }
 
   function clearMap() {
@@ -569,20 +621,22 @@
 
   // ---- Meet-up link: share "meet here" with the group; the link opens the app on that store ----
   const SITE = "https://konbininow.com/";
-  const meetUrl = (p) => `${SITE}?meet=${encodeURIComponent(p.id)}&n=${encodeURIComponent(name(p))}`;
+  const meetUrl = (p) => `${SITE}?meet=${encodeURIComponent(p.id)}&n=${encodeURIComponent(p.ja || name(p))}`;
   const meetText = () => {
     const p = lastShare && lastShare.p, m = lastShare && lastShare.mins;
     if (!p) return "むすびが一番近いコンビニを見つけてくれる🍙 Musubi finds the nearest open konbini!";
-    return `ここに集合！🍙 ${name(p)}${m ? `（徒歩${m}分）` : ""} Meet here! #コンビニNOW`;
+    return `ここに集合！🍙 ${p.ja || name(p)}${m ? `（徒歩${m}分）` : ""} Meet here! #コンビニNOW`;
   };
   const shareLink = () => (lastShare && lastShare.p ? meetUrl(lastShare.p) : SITE);
   $("shareBtn").onclick = async () => {
+    track("share_link");
     try {
       if (navigator.share) await navigator.share({ title: "コンビニNOW", text: meetText(), url: shareLink() });
       else { await navigator.clipboard.writeText(`${meetText()} ${shareLink()}`); setStatus("リンクをコピーしました · Link copied!"); }
     } catch {}
   };
   $("lineBtn").onclick = () => {
+    track("share_line");
     window.open(`https://line.me/R/share?text=${encodeURIComponent(meetText() + "\n" + shareLink())}`, "_blank", "noopener");
   };
 
@@ -591,12 +645,13 @@
     try {
       await ready;
       if (!MapCls) throw new Error("Google Maps didn't load.");
-      const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?languageCode=${LANG}&regionCode=JP`, {
+      const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?languageCode=ja&regionCode=JP`, {
         headers: { "X-Goog-Api-Key": KEY, "X-Goog-FieldMask": "id,displayName,location,formattedAddress,googleMapsUri" },
       });
       const d = await res.json();
       if (!res.ok || !d.location) throw new Error("集合場所が見つかりませんでした · Meet-up spot not found.");
-      const p = { id: d.id, displayName: (d.displayName && d.displayName.text) || n,
+      const jaN = (d.displayName && d.displayName.text) || n;
+      const p = { id: d.id, ja: jaN, displayName: brandEn(jaN) || jaN,
         location: { lat: () => d.location.latitude, lng: () => d.location.longitude },
         formattedAddress: d.formattedAddress, googleMapsURI: d.googleMapsUri };
       ensureMap(ll(p)); clearMap();
@@ -617,7 +672,7 @@
   }
   const qs = new URLSearchParams(location.search);
   const meetId = qs.get("meet");
-  if (meetId && /^[A-Za-z0-9_-]{10,300}$/.test(meetId)) showMeet(meetId, (qs.get("n") || "").slice(0, 80));
+  if (meetId && /^[A-Za-z0-9_-]{10,300}$/.test(meetId)) track("meet_open"), showMeet(meetId, (qs.get("n") || "").slice(0, 80));
 
   // ---- Shime fortune (今夜のシメ占い): one result per day per phone, shareable image card ----
   function seededRandom(seedStr) {
@@ -677,6 +732,7 @@
   let fortuneState = null;
   const fortuneText = () => fortuneState ? `今夜のシメ占いは【${fortuneState.f.lv}】${fortuneState.f.pickItem.split(" ").slice(0, 2).join(" ")}！🍙 #コンビニNOW #シメ占い` : "";
   $("fortuneBtn").onclick = async () => {
+    track("fortune");
     $("fortune").classList.remove("hidden");
     $("fImg").classList.add("hidden"); $("fShare").classList.add("hidden");
     $("fShaker").classList.remove("hidden");
@@ -694,6 +750,7 @@
   $("fClose").onclick = () => $("fortune").classList.add("hidden");
   $("fortune").addEventListener("click", (e) => { if (e.target.id === "fortune") $("fortune").classList.add("hidden"); });
   $("fShareImg").onclick = async () => {
+    track("fortune_img");
     if (!fortuneState) return;
     const file = new File([fortuneState.blob], "shime-fortune.png", { type: "image/png" });
     try {
@@ -701,10 +758,19 @@
     } catch { return; }
     const a = document.createElement("a"); a.href = URL.createObjectURL(fortuneState.blob); a.download = "shime-fortune.png"; a.click();
   };
-  $("fX").onclick = () => window.open(`https://x.com/intent/post?text=${encodeURIComponent(fortuneText())}&url=${encodeURIComponent(SITE)}`, "_blank", "noopener");
-  $("fLine").onclick = () => window.open(`https://line.me/R/share?text=${encodeURIComponent(fortuneText() + "\n" + SITE)}`, "_blank", "noopener");
+  $("fX").onclick = () => track("fortune_x") || window.open(`https://x.com/intent/post?text=${encodeURIComponent(fortuneText())}&url=${encodeURIComponent(SITE)}`, "_blank", "noopener");
+  $("fLine").onclick = () => track("fortune_line") || window.open(`https://line.me/R/share?text=${encodeURIComponent(fortuneText() + "\n" + SITE)}`, "_blank", "noopener");
 
   btn.onclick = async () => {
+    $("gmFallback").classList.add("hidden");
+    if (CFG.PAUSED || !allowSearch()) {
+      say("今夜はもう休憩…", "Musubi needs a break…"); holdUntil = Date.now() + 30000;
+      setStatus(CFG.PAUSED ? "ただいま休止中です。Google Mapsでどうぞ。 Konbini Now is paused right now. Please use Google Maps."
+                           : "今日の検索回数の上限です。また明日ね。 That's the search limit for today. See you tomorrow!", true);
+      $("gmFallback").classList.remove("hidden"); track(CFG.PAUSED ? "paused" : "limit");
+      return;
+    }
+    track("search");
     btn.disabled = true; $("result").classList.add("hidden");
     document.body.classList.add("searching"); $("help").classList.add("hidden");
     say(...pick(LINES.search));
@@ -727,20 +793,21 @@
         const open = found.filter((_, i) => states[i] === true)
           .sort((a, b) => metres(here, ll(a)) - metres(here, ll(b)));
         if (open.length) {
-          // Compare real walking times for the 3 closest open stores and pick the shortest walk
-          const top = open.slice(0, 3);
+          // Compare real walking times for the 2 closest open stores and pick the shortest walk
+          const top = open.slice(0, 2);
           setStatus("徒歩ルートを比較中… Comparing walking routes…");
           const times = await Promise.all(top.map((p) => walkMillis(here, p)));
           const best = times.indexOf(Math.min(...times));
           const chosen = top[best];
-          runs(true);
+          runs(true); track("found");
           await show(here, chosen, true, open.filter((p) => p !== chosen));
+          maybeInstall();
           return;
         }
         if (!fallback) fallback = found.find((_, i) => states[i] === undefined) || null;
       }
       if (fallback) { runs(true); await show(here, fallback, false, []); return; }
-      say(...LINES.lost[0]); holdUntil = Date.now() + 30000;
+      say(...LINES.lost[0]); holdUntil = Date.now() + 30000; track("none");
       setStatus("30km以内に営業中のコンビニはありません。 No open convenience store found within 30 km.", true);
     } catch (e) {
       console.error(e);
