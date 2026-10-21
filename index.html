@@ -88,7 +88,7 @@
   </div>
 </section>
 
-<script src="config.js"></script>
+<script src="config.js?v=3"></script>
 <script>
 (() => {
   const CFG = window.KONBINI_CONFIG || {};
@@ -171,23 +171,43 @@
   const ll = (p) => ({ lat: p.location.lat(), lng: p.location.lng() });
   const name = (p) => p.displayName || "Convenience store";
 
+  // true = open now, false = closed, undefined = hours not listed (handles 24-hour stores correctly)
   async function openState(place) {
     if (place.businessStatus && place.businessStatus !== "OPERATIONAL") return false;
-    try { return await place.isOpen(); } catch { return undefined; } // undefined = hours not listed
+    return place.openNow;
   }
 
+  // Places API (New) Nearby Search over REST, so we get Google's own "open now" flag
   async function searchAround(center, radius) {
-    const { places } = await Place.searchNearby({
-      fields: ["id", "displayName", "location", "formattedAddress", "businessStatus",
-               "regularOpeningHours", "utcOffsetMinutes", "googleMapsURI", "primaryType"],
-      locationRestriction: { center, radius },
-      includedTypes: ["convenience_store"],
-      excludedPrimaryTypes: ["gas_station"],
-      maxResultCount: 20,
-      rankPreference: rank.DISTANCE,
-      language: LANG, region: "jp",
+    const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": KEY,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.location,places.formattedAddress," +
+          "places.businessStatus,places.googleMapsUri,places.currentOpeningHours.openNow,places.regularOpeningHours.openNow",
+      },
+      body: JSON.stringify({
+        includedTypes: ["convenience_store"],
+        excludedPrimaryTypes: ["gas_station"],
+        maxResultCount: 20,
+        rankPreference: "DISTANCE",
+        languageCode: LANG, regionCode: "JP",
+        locationRestriction: { circle: { center: { latitude: center.lat, longitude: center.lng }, radius } },
+      }),
     });
-    return places || [];
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || "Store search failed.");
+    return (data.places || []).map((p) => ({
+      id: p.id,
+      displayName: p.displayName && p.displayName.text,
+      location: { lat: () => p.location.latitude, lng: () => p.location.longitude },
+      formattedAddress: p.formattedAddress,
+      businessStatus: p.businessStatus,
+      googleMapsURI: p.googleMapsUri,
+      openNow: p.currentOpeningHours ? p.currentOpeningHours.openNow
+             : p.regularOpeningHours ? p.regularOpeningHours.openNow : undefined,
+    }));
   }
 
   function clearMap() {
@@ -266,7 +286,7 @@
     btn.disabled = true; $("result").classList.add("hidden");
     try {
       await ready;
-      if (!Place) throw new Error("Google Maps didn't load.");
+      if (!map) throw new Error("Google Maps didn't load.");
       setStatus("Finding your location…");
       const here = await getPosition();
       map.setCenter(here); map.setZoom(16);
