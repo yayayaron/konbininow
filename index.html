@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f7b5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Konbini Finder</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #f6f7f5; --card: #ffffff; --ink: #1b1f1d; --muted: #5d6662;
+    --accent: #0f7b5f; --accent-ink: #ffffff; --line: #e2e6e3; --warn: #b4560a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121614; --card: #1c2220; --ink: #eef2f0; --muted: #a2aca7;
+            --accent: #2fb48b; --accent-ink: #06261c; --line: #2c3431; --warn: #f0a35c; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  body { display: flex; flex-direction: column; min-height: 100dvh; }
+  header { padding: 14px 16px 10px; padding-top: max(14px, env(safe-area-inset-top)); }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  #map { flex: 1 1 auto; min-height: 280px; background: var(--line); }
+  #panel { background: var(--card); border-top: 1px solid var(--line); padding: 14px 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  #findBtn { width: 100%; border: 0; border-radius: 14px; padding: 16px; font-size: 18px; font-weight: 700;
+    background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  #findBtn:disabled { opacity: .6; cursor: progress; }
+  #status { margin: 10px 0 0; font-size: 14px; color: var(--muted); min-height: 1.2em; }
+  #status.warn { color: var(--warn); }
+  .result { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+  .result h2 { margin: 0 0 4px; font-size: 17px; }
+  .meta { font-size: 14px; color: var(--muted); }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+    background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); margin-right: 6px; }
+  .badge.unknown { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .actions a { flex: 1; text-align: center; text-decoration: none; padding: 11px; border-radius: 10px;
+    font-weight: 600; font-size: 15px; border: 1px solid var(--accent); color: var(--accent); }
+  .actions a.primary { background: var(--accent); color: var(--accent-ink); }
+  #others { margin-top: 10px; }
+  #others summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+  #others ul { list-style: none; padding: 0; margin: 8px 0 0; }
+  #others li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; display: flex;
+    justify-content: space-between; gap: 8px; cursor: pointer; }
+  #keyBox { margin-top: 12px; font-size: 14px; }
+  #keyBox input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); margin: 6px 0; }
+  #keyBox button { padding: 9px 14px; border-radius: 8px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Konbini Finder</h1>
+  <p>Nearest convenience store that's open right now, with walking directions.</p>
+</header>
+
+<div id="map"></div>
+
+<section id="panel">
+  <button id="findBtn" type="button">Find nearest open konbini</button>
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <div id="result" class="result hidden">
+    <h2 id="rName"></h2>
+    <div class="meta"><span id="rBadge" class="badge">Open now</span><span id="rDist"></span></div>
+    <div class="meta" id="rAddr"></div>
+    <div class="actions">
+      <a id="navLink" class="primary" target="_blank" rel="noopener">Walk there (Google Maps)</a>
+      <a id="infoLink" target="_blank" rel="noopener">Store info</a>
+    </div>
+    <details id="others" class="hidden">
+      <summary>Other open stores nearby</summary>
+      <ul id="otherList"></ul>
+    </details>
+  </div>
+
+  <div id="keyBox" class="hidden">
+    <strong>API key needed.</strong> Paste your Google Maps Platform key (saved on this device only),
+    or put it in <code>config.js</code> before publishing.
+    <input id="keyInput" type="text" placeholder="AIza..." autocomplete="off">
+    <button id="keySave" type="button">Save key</button>
+  </div>
+</section>
+
+<script src="config.js"></script>
+<script>
+(() => {
+  const CFG = window.KONBINI_CONFIG || {};
+  const LANG = CFG.LANGUAGE || "en";
+  const RADII = [400, 1000, 2500, 5000]; // metres, widened until an open store is found
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $("status"), btn = $("findBtn");
+
+  function setStatus(msg, warn = false) { statusEl.textContent = msg; statusEl.classList.toggle("warn", warn); }
+
+  // ---- API key: config.js first, then a key saved on this device ----
+  function getKey() {
+    if (CFG.GOOGLE_MAPS_API_KEY) return CFG.GOOGLE_MAPS_API_KEY;
+    try { return localStorage.getItem("konbiniKey") || ""; } catch { return ""; }
+  }
+  $("keySave").onclick = () => {
+    const k = $("keyInput").value.trim();
+    if (!k) return;
+    try { localStorage.setItem("konbiniKey", k); } catch {}
+    location.reload();
+  };
+  const KEY = getKey();
+  if (!KEY) {
+    $("keyBox").classList.remove("hidden");
+    btn.disabled = true;
+    setStatus("Add an API key to start.", true);
+    return;
+  }
+
+  // ---- Google Maps JS bootstrap loader (official dynamic import snippet) ----
+  (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})
+  ({ key: KEY, v: "weekly", language: LANG, region: "JP" });
+
+  window.gm_authFailure = () => {
+    setStatus("Google rejected the API key. Check that it's valid, billing is on, and this site is allowed.", true);
+    $("keyBox").classList.remove("hidden");
+  };
+
+  let map, Place, Route, AdvancedMarkerElement, LatLngBounds, rank;
+  let youMarker, storeMarker, routeLines = [], otherMarkers = [];
+
+  async function init() {
+    const [maps, places, routes, marker, core] = await Promise.all([
+      google.maps.importLibrary("maps"),
+      google.maps.importLibrary("places"),
+      google.maps.importLibrary("routes"),
+      google.maps.importLibrary("marker"),
+      google.maps.importLibrary("core"),
+    ]);
+    Place = places.Place; rank = places.SearchNearbyRankPreference;
+    Route = routes.Route; AdvancedMarkerElement = marker.AdvancedMarkerElement;
+    LatLngBounds = core.LatLngBounds;
+    map = new maps.Map($("map"), {
+      center: { lat: 35.681, lng: 139.767 }, zoom: 14, // Tokyo Station until we know where you are
+      mapId: CFG.MAP_ID || "DEMO_MAP_ID", disableDefaultUI: true, zoomControl: true,
+      gestureHandling: "greedy", clickableIcons: false,
+    });
+  }
+  const ready = init().catch((e) => { console.error(e); setStatus("Couldn't load Google Maps. Check the API key and enabled APIs.", true); });
+
+  // ---- helpers ----
+  function getPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error("This browser can't share location."));
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        (err) => reject(new Error(err.code === 1
+          ? "Location permission was denied. Allow location for this site in your browser settings and try again."
+          : "Couldn't get your location. Try again outdoors or with Wi-Fi on.")),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+    });
+  }
+  function metres(a, b) {
+    const R = 6371000, toR = (x) => x * Math.PI / 180;
+    const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+  }
+  const fmtDist = (m) => m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
+  const ll = (p) => ({ lat: p.location.lat(), lng: p.location.lng() });
+  const name = (p) => p.displayName || "Convenience store";
+
+  async function openState(place) {
+    if (place.businessStatus && place.businessStatus !== "OPERATIONAL") return false;
+    try { return await place.isOpen(); } catch { return undefined; } // undefined = hours not listed
+  }
+
+  async function searchAround(center, radius) {
+    const { places } = await Place.searchNearby({
+      fields: ["id", "displayName", "location", "formattedAddress", "businessStatus",
+               "regularOpeningHours", "utcOffsetMinutes", "googleMapsURI", "primaryType"],
+      locationRestriction: { center, radius },
+      includedTypes: ["convenience_store"],
+      excludedPrimaryTypes: ["gas_station"],
+      maxResultCount: 20,
+      rankPreference: rank.DISTANCE,
+      language: LANG, region: "jp",
+    });
+    return places || [];
+  }
+
+  function clearMap() {
+    routeLines.forEach((l) => l.setMap(null)); routeLines = [];
+    otherMarkers.forEach((m) => (m.map = null)); otherMarkers = [];
+    if (storeMarker) storeMarker.map = null;
+  }
+
+  function pin(label, bg) {
+    const el = document.createElement("div");
+    el.textContent = label;
+    el.style.cssText = `background:${bg};color:#fff;font:700 13px system-ui;padding:6px 9px;border-radius:14px;` +
+      "box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap";
+    return el;
+  }
+
+  async function drawRoute(from, place) {
+    const to = ll(place);
+    try {
+      const { routes } = await Route.computeRoutes({
+        origin: from, destination: to, travelMode: "WALKING",
+        fields: ["path", "distanceMeters", "durationMillis"],
+      });
+      if (routes && routes[0]) {
+        routeLines = routes[0].createPolylines();
+        routeLines.forEach((l) => l.setMap(map));
+        const b = new LatLngBounds(); routes[0].path.forEach((pt) => b.extend(pt));
+        map.fitBounds(b, 60);
+        const mins = routes[0].durationMillis ? Math.max(1, Math.round(routes[0].durationMillis / 60000)) : null;
+        return { dist: routes[0].distanceMeters, mins };
+      }
+    } catch (e) { console.warn("Route failed, showing straight-line distance", e); }
+    const b = new LatLngBounds(); b.extend(from); b.extend(to); map.fitBounds(b, 80);
+    return { dist: null, mins: null };
+  }
+
+  async function show(from, chosen, openFlag, others) {
+    clearMap();
+    const to = ll(chosen);
+    storeMarker = new AdvancedMarkerElement({ map, position: to, title: name(chosen), content: pin("🏪 " + name(chosen), "#0f7b5f") });
+    others.forEach((o) => {
+      const m = new AdvancedMarkerElement({ map, position: ll(o), title: name(o), content: pin("🏪", "#5d6662") });
+      m.addListener("click", () => show(from, o, true, others.filter((x) => x !== o).concat(chosen)));
+      otherMarkers.push(m);
+    });
+
+    setStatus("Getting walking route…");
+    const r = await drawRoute(from, chosen);
+    const straight = metres(from, to);
+    $("rName").textContent = name(chosen);
+    $("rBadge").textContent = openFlag ? "Open now" : "Hours not listed";
+    $("rBadge").classList.toggle("unknown", !openFlag);
+    $("rDist").textContent = r.dist
+      ? `${fmtDist(r.dist)} walk${r.mins ? ` · about ${r.mins} min` : ""}`
+      : `${fmtDist(straight)} away (straight line)`;
+    $("rAddr").textContent = chosen.formattedAddress || "";
+    $("navLink").href = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}` +
+      `&destination=${to.lat},${to.lng}&destination_place_id=${encodeURIComponent(chosen.id)}&travelmode=walking`;
+    $("infoLink").href = chosen.googleMapsURI || `https://www.google.com/maps/search/?api=1&query=${to.lat},${to.lng}&query_place_id=${encodeURIComponent(chosen.id)}`;
+
+    const list = $("otherList"); list.innerHTML = "";
+    others.slice(0, 5).forEach((o) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span></span><span class="meta"></span>`;
+      li.children[0].textContent = name(o);
+      li.children[1].textContent = fmtDist(metres(from, ll(o)));
+      li.onclick = () => show(from, o, true, others.filter((x) => x !== o).concat(chosen));
+      list.appendChild(li);
+    });
+    $("others").classList.toggle("hidden", others.length === 0);
+    $("result").classList.remove("hidden");
+    setStatus(openFlag ? "" : "No store with confirmed hours is open nearby; this is the nearest one without listed hours.", !openFlag);
+  }
+
+  btn.onclick = async () => {
+    btn.disabled = true; $("result").classList.add("hidden");
+    try {
+      await ready;
+      if (!Place) throw new Error("Google Maps didn't load.");
+      setStatus("Finding your location…");
+      const here = await getPosition();
+      map.setCenter(here); map.setZoom(16);
+      if (youMarker) youMarker.map = null;
+      youMarker = new AdvancedMarkerElement({ map, position: here, title: "You", content: pin("You", "#1a73e8") });
+
+      let fallback = null;
+      for (const radius of RADII) {
+        setStatus(`Searching within ${fmtDist(radius)}…`);
+        const found = await searchAround(here, radius);
+        const states = await Promise.all(found.map(openState));
+        const open = found.filter((_, i) => states[i] === true)
+          .sort((a, b) => metres(here, ll(a)) - metres(here, ll(b)));
+        if (open.length) { await show(here, open[0], true, open.slice(1)); return; }
+        if (!fallback) fallback = found.find((_, i) => states[i] === undefined) || null;
+      }
+      if (fallback) { await show(here, fallback, false, []); return; }
+      setStatus("No open convenience store found within 5 km.", true);
+    } catch (e) {
+      console.error(e);
+      setStatus(e.message || "Something went wrong. Please try again.", true);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+})();
+</script>
+</body>
+</html>
