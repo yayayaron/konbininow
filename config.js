@@ -11,5 +11,8 @@ window.KONBINI_CONFIG = {
   // Max searches per phone per day.
   DAILY_LIMIT: 30,
   // Anonymous event counter (Cloudflare Worker). Empty = off.
+  // Last-train timer (Cloudflare Worker + Ekispert). Empty = timer hidden.
+  // Set to "https://konbininow-stats.yaron-silberberg.workers.dev" once the EKISPERT_KEY secret is in the Worker.
+  TRAIN_URL: "",
   STATS_URL: "https://konbininow-stats.yaron-silberberg.workers.dev/e",
 };

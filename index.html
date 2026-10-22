@@ -114,6 +114,29 @@
     font-weight: 800; font-size: 16px; color: var(--ink); border: 1px solid var(--line); background: #ffffff10; font-family: inherit; }
   .actions a.primary { background: linear-gradient(135deg, var(--teal), #24b3ff); color: #06222a; border: 0; }
   .actions small, .share small { display: block; font-weight: 500; font-size: 11.5px; opacity: .85; }
+  .train { margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: #2ee6c514; border: 1px solid #2ee6c555; }
+  .trow { display: flex; align-items: center; gap: 10px; }
+  .ticon { font-size: 26px; }
+  .tmain { flex: 1; min-width: 0; }
+  .tmain b { display: block; font-size: 16px; }
+  .tmain small { display: block; color: var(--muted); font-size: 12.5px; }
+  .trow { flex-wrap: wrap; }
+  .tcount { flex-basis: 100%; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-weight: 800; font-size: 26px; color: #2ee6c5; line-height: 1.15; }
+  .tcount:empty { display: none; }
+  .tcount small { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+  .tcount.warn { color: var(--amber); } .tcount.late { color: #ff4d8d; }
+  .tinfo { margin-top: 6px; font-size: 13.5px; }
+  .tinfo small { display: block; color: var(--muted); font-size: 12px; }
+  .tset { margin-top: 8px; }
+  .tset input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: #ffffff10; color: var(--ink); font: inherit; font-size: 16px; }
+  .tsug { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .tsug button { border: 1px solid var(--line); background: #ffffff14; color: var(--ink); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+  .tsug button small { color: var(--muted); margin-left: 4px; font-size: 11px; }
+  .tbtn { display: block; margin-top: 8px; padding: 11px 12px; border-radius: 12px; text-align: center; text-decoration: none; font-weight: 800; font-size: 16px;
+    background: linear-gradient(90deg, #2ee6c5, #26a7ff); color: #0b1a24; }
+  .tbtn small { display: block; font-weight: 500; font-size: 11.5px; color: #0b1a24; opacity: .8; }
+  .tsmall { display: inline-block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+  .tlink { margin-top: 6px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0; }
   .picks { margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: #ffb70314; border: 1px dashed #ffb70355; font-size: 14px; }
   .picks b { color: var(--amber); }
   .share { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
@@ -224,6 +247,19 @@
       <a id="navLink" class="primary" target="_blank" rel="noopener">歩いて行く 🚶<small>Walk there (Google Maps)</small></a>
       <a id="infoLink" target="_blank" rel="noopener">店舗情報<small>Store info</small></a>
     </div>
+    <div id="train" class="train hidden">
+      <div class="trow">
+        <span class="ticon">🚃</span>
+        <div class="tmain"><b id="tStation">終電タイマー</b><small id="tWalk">Last-train timer</small></div>
+        <div class="tcount" id="tCount"></div>
+      </div>
+      <div class="tinfo" id="tInfo"></div>
+      <div class="tset hidden" id="tSet">
+        <input id="tHome" type="search" inputmode="search" autocomplete="off" placeholder="帰る駅を入力（例：新宿） · Your home station">
+        <div class="tsug" id="tSug"></div>
+      </div>
+      <button type="button" class="tlink" id="tEdit">帰る駅を変更 · Change home station</button>
+    </div>
     <div class="picks" id="picks"></div>
     <div class="share">
       <button type="button" id="lineBtn" class="line">LINEで送る<small>Send on LINE</small></button>
@@ -271,7 +307,13 @@
                   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
   // Anonymous event counter: only the event name is sent (no location, no ID, no cookie)
-  const track = (e) => { if (!CFG.STATS_URL) return; try { navigator.sendBeacon(`${CFG.STATS_URL}?e=${encodeURIComponent(e)}`); } catch {} };
+  // "Don't count me": open konbininow.com/?me=1 once on your own device (?me=0 to undo)
+  const meParam = new URLSearchParams(location.search).get("me");
+  if (meParam === "1") store.set("kn_me", "1");
+  if (meParam === "0") try { localStorage.removeItem("kn_me"); } catch {}
+  const notCounted = store.get("kn_me") === "1";
+  if (notCounted) { const f = document.querySelector("footer"); if (f) f.appendChild(Object.assign(document.createElement("div"), { textContent: "この端末はカウントしません · This device is not counted", style: "opacity:.6;margin-top:4px" })); }
+  const track = (e) => { if (!CFG.STATS_URL || notCounted) return; try { navigator.sendBeacon(`${CFG.STATS_URL}?e=${encodeURIComponent(e)}`); } catch {} };
 
   // Cost guard: CFG.PAUSED switches searches off for everyone; DAILY_LIMIT caps searches per phone per day
   const DAILY_LIMIT = CFG.DAILY_LIMIT || 30;
@@ -624,6 +666,7 @@
     $("infoLink").href = placeUrl(chosen);
     $("picks").innerHTML = picksHtml();
     lastShare = { p: chosen, mins: r.mins };
+    loadTrain(from);
 
     const list = $("otherList"); list.innerHTML = "";
     others.slice(0, 5).forEach((o) => {
@@ -653,6 +696,160 @@
 
   $("others").addEventListener("toggle", () => {
     if ($("others").open) [...$("otherList").children].forEach((li) => li._loadJa && li._loadJa());
+  });
+
+  // ---- Last-train timer (終電タイマー): nearest station + last train home, via our Cloudflare Worker (Ekispert) ----
+  const TRAIN = CFG.TRAIN_URL || "";
+  let trainFrom = null, trainData = null, trainTick = null, homeTimer = null;
+  const getHome = () => { try { return JSON.parse(store.get("kn_home") || "null"); } catch { return null; } };
+  const cleanSt = (n) => String(n || "").replace(/\(.+?\)$/, "");
+  const walkMin = (m) => Math.max(1, Math.round((m * 1.25) / 75)); // straight line → about 75 m per minute on foot
+  function trainDeparts(t) {
+    // Ekispert gives HH:MM on the service day; times before 04:00 are after midnight
+    const [h, m] = t.depart.split(":").map(Number);
+    const y = +t.date.slice(0, 4), mo = +t.date.slice(4, 6) - 1, d = +t.date.slice(6, 8);
+    return new Date(Date.UTC(y, mo, d + (h < 4 ? 1 : 0), h - 9, m)); // Japan time → UTC
+  }
+  function drawTrain() {
+    const t = trainData && trainData.train, st = trainData && trainData.station;
+    if (!t || !st) return;
+    const walk = walkMin(st.distance);
+    const leaveBy = new Date(trainDeparts(t).getTime() - walk * 60000);
+    const left = Math.floor((leaveBy - Date.now()) / 60000);
+    const hh = String((leaveBy.getUTCHours() + 9) % 24).padStart(2, "0"), mm = String(leaveBy.getUTCMinutes()).padStart(2, "0");
+    const el = $("tCount");
+    el.classList.toggle("warn", left < 30 && left >= 10); el.classList.toggle("late", left < 10);
+    if (left < 0) {
+      el.innerHTML = `終電なし<small>Last train gone</small>`;
+      $("tInfo").innerHTML = `今夜の終電（${t.depart}発）は間に合いません 🚕<small>Tonight's last train (${t.depart}) is out of reach. Taxi, or the first train.</small>`;
+      if (!trainData.goneTracked) { trainData.goneTracked = true; track("train_gone"); }
+      return;
+    }
+    const hm = left >= 60 ? `${Math.floor(left / 60)}時間${left % 60}分` : `${left}分`;
+    el.innerHTML = `あと${hm}<small>${hh}:${mm}までに出発 · leave by ${hh}:${mm}</small>`;
+    $("tInfo").innerHTML = `終電 ${t.depart}発 ${t.line}${t.changes ? `（乗換${t.changes}回）` : ""} → ${cleanSt(t.to)} ${t.arrive}着` +
+      `<small>Last train ${t.depart} → ${cleanSt(t.to)}, arrives ${t.arrive}${t.changes ? `, ${t.changes} change${t.changes > 1 ? "s" : ""}` : ""}</small>`;
+  }
+  function trainMsg(title, sub, info) {
+    $("tStation").textContent = title; $("tWalk").textContent = sub || ""; $("tCount").innerHTML = ""; $("tInfo").innerHTML = info || "";
+  }
+  // Option A (no extra account): nearest station from Google Places, walk estimate, and a one-tap
+  // last-train search on Yahoo!乗換案内 (type=2 = 終電) plus Google Maps train directions.
+  const STATION_A = !TRAIN && CFG.STATION_INFO !== false;
+  const getHomeName = () => store.get("kn_home_name") || "";
+  const stName = (n) => String(n || "").replace(/\s*\(.+?\)\s*$/, "").replace(/駅$/, "");
+  let stationCache = null;
+  async function nearestStationA(c) {
+    if (stationCache && metres(stationCache.c, c) < 150) return stationCache.st;
+    const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": KEY, "X-Goog-FieldMask": "places.id,places.displayName,places.location" },
+      body: JSON.stringify({
+        includedTypes: ["train_station", "subway_station", "light_rail_station"], maxResultCount: 5, rankPreference: "DISTANCE",
+        languageCode: "ja", regionCode: "JP",
+        locationRestriction: { circle: { center: { latitude: c.lat, longitude: c.lng }, radius: 3000 } },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error("station search failed");
+    const p = (data.places || [])[0];
+    const st = p ? { id: p.id, name: (p.displayName && p.displayName.text) || "", loc: { lat: p.location.latitude, lng: p.location.longitude } } : null;
+    stationCache = { c, st };
+    return st;
+  }
+  function drawStationA(st, from) {
+    const dist = Math.round(metres(from, st.loc)), walk = walkMin(dist), home = getHomeName();
+    $("tStation").textContent = `最寄り駅：${stName(st.name)}駅`;
+    $("tWalk").textContent = `約${fmtDist(dist)}・徒歩約${walk}分 · about ${walk} min walk`;
+    $("tCount").innerHTML = "";
+    $("tEdit").classList.toggle("hidden", !home);
+    if (!home) {
+      $("tInfo").innerHTML = "帰る駅を入れると、終電をワンタップで調べられるよ<small>Add your home station to check your last train in one tap</small>";
+      $("tSet").classList.remove("hidden");
+      return;
+    }
+    $("tSet").classList.add("hidden");
+    if (stName(home) === stName(st.name)) { $("tInfo").innerHTML = "ここが帰る駅だよ！🏠<small>This is your home station!</small>"; return; }
+    const y = `https://transit.yahoo.co.jp/search/result?from=${encodeURIComponent(stName(st.name))}&to=${encodeURIComponent(stName(home))}&type=2`;
+    const g = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(st.name)}&origin_place_id=${encodeURIComponent(st.id)}&destination=${encodeURIComponent(stName(home) + "駅")}&travelmode=transit`;
+    $("tInfo").innerHTML = `<a class="tbtn" target="_blank" rel="noopener" id="tYahoo">🚃 終電を調べる → <span></span><small>Check the last train (Yahoo!乗換案内)</small></a>` +
+      `<a class="tsmall" target="_blank" rel="noopener" id="tGmaps">Google Maps train route (English)</a>`;
+    $("tYahoo").href = y; $("tYahoo").querySelector("span").textContent = stName(home);
+    $("tGmaps").href = g;
+  }
+  async function loadTrain(from) {
+    if (STATION_A) {
+      trainFrom = from;
+      try {
+        const st = await nearestStationA(from);
+        if (from !== trainFrom) return;
+        if (!st) { $("train").classList.add("hidden"); return; }
+        $("train").classList.remove("hidden");
+        drawStationA(st, from); track("train_shown");
+        trainData = { a: true, st, from };
+      } catch { $("train").classList.add("hidden"); }
+      return;
+    }
+    if (!TRAIN) return;
+    trainFrom = from; clearInterval(trainTick); trainData = null;
+    $("train").classList.remove("hidden");
+    const home = getHome();
+    $("tEdit").classList.toggle("hidden", !home);
+    if (!home) {
+      trainMsg("終電タイマー", "Last-train timer", "帰る駅を設定すると、終電までの残り時間がわかるよ<small>Set your home station to see the time left for your last train</small>");
+      $("tSet").classList.remove("hidden");
+      return;
+    }
+    $("tSet").classList.add("hidden");
+    trainMsg("終電タイマー", `帰る駅：${cleanSt(home.name)} · Home: ${cleanSt(home.name)}`, "終電を調べ中…<small>Checking the last train…</small>");
+    try {
+      const d = await fetch(`${TRAIN}/lasttrain?lat=${from.lat.toFixed(3)}&lng=${from.lng.toFixed(3)}&home=${encodeURIComponent(home.code)}`).then((r) => r.json());
+      if (from !== trainFrom) return;
+      if (d.error || !d.station) { $("train").classList.add("hidden"); return; }
+      const st = d.station, walk = walkMin(st.distance);
+      $("tStation").textContent = `最寄り駅：${cleanSt(st.name)}駅`;
+      $("tWalk").textContent = `約${fmtDist(st.distance)}・徒歩約${walk}分 · about ${walk} min walk`;
+      if (d.same) { $("tInfo").innerHTML = `ここが帰る駅だよ！🏠<small>This is your home station!</small>`; return; }
+      if (!d.train || !d.train.depart) { $("tInfo").innerHTML = `終電情報が見つかりませんでした<small>No last-train information found</small>`; return; }
+      trainData = d; track("train_shown");
+      drawTrain(); trainTick = setInterval(drawTrain, 30000);
+    } catch { $("train").classList.add("hidden"); }
+  }
+  $("tHome").addEventListener("keydown", (e) => { if (e.key === "Enter" && STATION_A) { const b = $("tSug").querySelector("button"); if (b) b.click(); } });
+  $("tEdit").onclick = () => { $("tSet").classList.toggle("hidden"); $("tHome").focus(); };
+  $("tHome").addEventListener("input", () => {
+    clearTimeout(homeTimer);
+    const q = $("tHome").value.trim();
+    if (!q) { $("tSug").innerHTML = ""; return; }
+    if (STATION_A) {
+      const box = $("tSug"); box.innerHTML = "";
+      const b = document.createElement("button"); b.type = "button";
+      b.innerHTML = `<span></span><small>を帰る駅にする · Set as home</small>`; b.children[0].textContent = `「${stName(q)}」`;
+      b.onclick = () => {
+        store.set("kn_home_name", stName(q)); track("train_home");
+        $("tHome").value = ""; box.innerHTML = "";
+        if (trainData && trainData.a) drawStationA(trainData.st, trainData.from);
+      };
+      box.appendChild(b);
+      return;
+    }
+    homeTimer = setTimeout(async () => {
+      try {
+        const d = await fetch(`${TRAIN}/station?name=${encodeURIComponent(q)}`).then((r) => r.json());
+        const box = $("tSug"); box.innerHTML = "";
+        (d.stations || []).forEach((s) => {
+          const b = document.createElement("button"); b.type = "button";
+          b.innerHTML = `<span></span><small></small>`; b.children[0].textContent = cleanSt(s.name); b.children[1].textContent = s.pref || "";
+          b.onclick = () => {
+            store.set("kn_home", JSON.stringify({ code: s.code, name: s.name })); track("train_home");
+            $("tHome").value = ""; box.innerHTML = "";
+            if (trainFrom) loadTrain(trainFrom);
+          };
+          box.appendChild(b);
+        });
+        if (!(d.stations || []).length) box.innerHTML = `<small style="color:var(--muted)">見つかりません · Not found</small>`;
+      } catch {}
+    }, 350);
   });
 
   // ---- Store link: share this konbini with friends; the link opens the app on that store ----
@@ -700,6 +897,7 @@
       $("rAddr").textContent = p.formattedAddress || ""; $("rLoc").textContent = "";
       $("navLink").href = dirUrl(p); $("infoLink").href = placeUrl(p);
       $("picks").innerHTML = picksHtml();
+      $("train").classList.add("hidden");
       $("others").classList.add("hidden");
       lastShare = { p, mins: null };
       $("result").classList.remove("hidden");
